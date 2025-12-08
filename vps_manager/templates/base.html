@@ -8,86 +8,133 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
-            background-color: #1a1a2e;
-            color: #eaeaea;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1d3a 100%);
+            color: #e4e6eb;
             min-height: 100vh;
         }
         .navbar {
-            background-color: #16213e !important;
-            border-bottom: 1px solid #0f3460;
+            background: linear-gradient(135deg, #1e2139 0%, #252946 100%) !important;
+            border-bottom: 2px solid #00d4ff;
+            box-shadow: 0 4px 6px rgba(0, 212, 255, 0.1);
         }
         .card {
-            background-color: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 10px;
+            background: linear-gradient(135deg, #1e2139 0%, #252946 100%);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
         .card-header {
-            background-color: #0f3460;
-            border-bottom: 1px solid #0f3460;
+            background: linear-gradient(90deg, #00d4ff 0%, #0099ff 100%);
+            border-bottom: none;
+            color: #0a0e27;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0;
         }
         .btn-primary {
-            background-color: #e94560;
-            border-color: #e94560;
+            background: linear-gradient(90deg, #00d4ff 0%, #0099ff 100%);
+            border: none;
+            color: #0a0e27;
+            font-weight: 600;
         }
         .btn-primary:hover {
-            background-color: #c73e54;
-            border-color: #c73e54;
+            background: linear-gradient(90deg, #00b8e6 0%, #0088e6 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 212, 255, 0.3);
         }
         .btn-success {
-            background-color: #00bf63;
-            border-color: #00bf63;
+            background: linear-gradient(90deg, #00ff88 0%, #00cc6a 100%);
+            border: none;
+            color: #0a0e27;
+            font-weight: 600;
+        }
+        .btn-success:hover {
+            background: linear-gradient(90deg, #00e67a 0%, #00b35d 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 255, 136, 0.3);
+        }
+        .btn-danger {
+            background: linear-gradient(90deg, #ff3366 0%, #cc0044 100%);
+            border: none;
+        }
+        .btn-danger:hover {
+            background: linear-gradient(90deg, #e62e5c 0%, #b3003d 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(255, 51, 102, 0.3);
         }
         .btn-outline-light:hover {
-            background-color: #0f3460;
+            background-color: rgba(0, 212, 255, 0.1);
+            border-color: #00d4ff;
+            color: #00d4ff;
         }
         .status-active {
-            color: #00bf63;
+            color: #00ff88;
+            text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
         }
         .status-inactive {
-            color: #e94560;
+            color: #ff3366;
+            text-shadow: 0 0 8px rgba(255, 51, 102, 0.5);
         }
         .form-control, .form-select {
-            background-color: #1a1a2e;
-            border: 1px solid #0f3460;
-            color: #eaeaea;
+            background-color: rgba(30, 33, 57, 0.8);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #e4e6eb;
         }
         .form-control:focus, .form-select:focus {
-            background-color: #1a1a2e;
-            border-color: #e94560;
-            color: #eaeaea;
-            box-shadow: 0 0 0 0.25rem rgba(233, 69, 96, 0.25);
+            background-color: rgba(30, 33, 57, 0.9);
+            border-color: #00d4ff;
+            color: #e4e6eb;
+            box-shadow: 0 0 0 0.25rem rgba(0, 212, 255, 0.25);
         }
         .table {
-            color: #eaeaea;
+            color: #e4e6eb;
         }
         .table-hover tbody tr:hover {
-            background-color: #0f3460;
-            color: #eaeaea;
+            background-color: rgba(0, 212, 255, 0.1);
+            color: #e4e6eb;
         }
         .alert-success {
-            background-color: #00bf6333;
-            border-color: #00bf63;
-            color: #00bf63;
+            background-color: rgba(0, 255, 136, 0.15);
+            border-color: #00ff88;
+            color: #00ff88;
         }
         .alert-warning {
-            background-color: #ffc10733;
+            background-color: rgba(255, 193, 7, 0.15);
             border-color: #ffc107;
             color: #ffc107;
         }
         .alert-danger {
-            background-color: #e9456033;
-            border-color: #e94560;
-            color: #e94560;
+            background-color: rgba(255, 51, 102, 0.15);
+            border-color: #ff3366;
+            color: #ff3366;
+        }
+        .alert-info {
+            background-color: rgba(0, 212, 255, 0.15);
+            border-color: #00d4ff;
+            color: #00d4ff;
         }
         .server-card {
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
         }
         .server-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 212, 255, 0.2);
+            border-color: #00d4ff;
         }
         .spinner-border-sm {
             width: 1rem;
             height: 1rem;
+        }
+        .nav-link {
+            color: #e4e6eb !important;
+            transition: all 0.3s ease;
+        }
+        .nav-link:hover {
+            color: #00d4ff !important;
+        }
+        .navbar-brand {
+            color: #00d4ff !important;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
         }
     </style>
 </head>
