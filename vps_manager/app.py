@@ -44,7 +44,8 @@ class VPSServer(db.Model):
     name = db.Column(db.String(100), nullable=False)
     ip_address = db.Column(db.String(45), nullable=False)
     ssh_user = db.Column(db.String(100), nullable=False)
-    ssh_password = db.Column(db.Text, nullable=False)
+    ssh_password = db.Column(db.Text, nullable=True)
+    ssh_key = db.Column(db.Text, nullable=True)
     ssh_port = db.Column(db.Integer, default=22)
     is_active = db.Column(db.Boolean, default=False)
     last_checked = db.Column(db.DateTime)
@@ -161,11 +162,19 @@ def send_notification(message, notification_type='info'):
             print(f"Email notification failed: {e}")
 
 
-def check_server_status(ip, port, username, password, timeout=10):
+def check_server_status(ip, port, username, password=None, ssh_key=None, timeout=10):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
+        
+        if ssh_key:
+            from io import StringIO
+            key_file = StringIO(ssh_key)
+            pkey = paramiko.RSAKey.from_private_key(key_file)
+            ssh.connect(ip, port=port, username=username, pkey=pkey, timeout=timeout)
+        else:
+            ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
+        
         ssh.close()
         return True, "Connection successful"
     except paramiko.AuthenticationException:
@@ -244,19 +253,22 @@ def add_vps():
         ip_address = request.form.get('ip_address')
         ssh_user = request.form.get('ssh_user')
         ssh_password = request.form.get('ssh_password')
+        ssh_key = request.form.get('ssh_key')
         ssh_port = int(request.form.get('ssh_port', 22))
         group = request.form.get('group', 'default')
         tags = request.form.get('tags', '')
         
-        is_active, message = check_server_status(ip_address, ssh_port, ssh_user, ssh_password)
+        is_active, message = check_server_status(ip_address, ssh_port, ssh_user, ssh_password, ssh_key)
         
-        encrypted_pass = encrypt_password(ssh_password)
+        encrypted_pass = encrypt_password(ssh_password) if ssh_password else None
+        encrypted_key = encrypt_password(ssh_key) if ssh_key else None
         
         server = VPSServer(
             name=name,
             ip_address=ip_address,
             ssh_user=ssh_user,
             ssh_password=encrypted_pass,
+            ssh_key=encrypted_key,
             ssh_port=ssh_port,
             is_active=is_active,
             last_checked=datetime.utcnow(),

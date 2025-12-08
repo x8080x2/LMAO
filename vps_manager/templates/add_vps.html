@@ -34,15 +34,32 @@
                         </div>
                     </div>
 
-                    <div class="mb-4">
+                    <div class="mb-3">
+                        <label class="form-label">Authentication Method</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="auth_method" id="auth_password" value="password" checked onchange="toggleAuthMethod()">
+                            <label class="btn btn-outline-light" for="auth_password">Password</label>
+                            
+                            <input type="radio" class="btn-check" name="auth_method" id="auth_key" value="key" onchange="toggleAuthMethod()">
+                            <label class="btn btn-outline-light" for="auth_key">SSH Key</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4" id="password_section">
                         <label for="ssh_password" class="form-label">SSH Password</label>
                         <div class="input-group">
-                            <input type="password" class="form-control" id="ssh_password" name="ssh_password" required>
+                            <input type="password" class="form-control" id="ssh_password" name="ssh_password">
                             <button class="btn btn-outline-light" type="button" onclick="togglePassword()">
                                 <i class="bi bi-eye" id="toggleIcon"></i>
                             </button>
                         </div>
                         <small class="text-muted">Password is encrypted before storage</small>
+                    </div>
+
+                    <div class="mb-4" id="key_section" style="display: none;">
+                        <label for="ssh_key" class="form-label">SSH Private Key</label>
+                        <textarea class="form-control" id="ssh_key" name="ssh_key" rows="6" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"></textarea>
+                        <small class="text-muted">Private key is encrypted before storage</small>
                     </div>
 
                     <div class="mb-3">
@@ -94,6 +111,26 @@ function togglePassword() {
         passwordInput.type = 'password';
         toggleIcon.classList.remove('bi-eye-slash');
         toggleIcon.classList.add('bi-eye');
+    }
+}
+
+function toggleAuthMethod() {
+    const authMethod = document.querySelector('input[name="auth_method"]:checked').value;
+    const passwordSection = document.getElementById('password_section');
+    const keySection = document.getElementById('key_section');
+    const passwordInput = document.getElementById('ssh_password');
+    const keyInput = document.getElementById('ssh_key');
+    
+    if (authMethod === 'password') {
+        passwordSection.style.display = 'block';
+        keySection.style.display = 'none';
+        passwordInput.required = true;
+        keyInput.required = false;
+    } else {
+        passwordSection.style.display = 'none';
+        keySection.style.display = 'block';
+        passwordInput.required = false;
+        keyInput.required = true;
     }
 }
 

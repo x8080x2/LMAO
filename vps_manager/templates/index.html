@@ -3,16 +3,47 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-hdd-stack me-2"></i>VPS Servers</h2>
-    <a href="/add-vps" class="btn btn-primary">
-        <i class="bi bi-plus-circle me-1"></i>Add VPS
-    </a>
+    <div class="d-flex gap-2">
+        {% if servers %}
+        <button class="btn btn-outline-light" onclick="checkAllServers()" id="checkAllBtn">
+            <i class="bi bi-arrow-repeat me-1"></i>Check All
+        </button>
+        {% endif %}
+        <a href="/add-vps" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Add VPS
+        </a>
+    </div>
 </div>
 
 {% if servers %}
+<div class="mb-3">
+    <div class="row g-2">
+        <div class="col-md-4">
+            <select class="form-select" id="groupFilter" onchange="filterServers()">
+                <option value="">All Groups</option>
+                {% for group in servers|map(attribute='group')|unique %}
+                {% if group %}
+                <option value="{{ group }}">{{ group }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <input type="text" class="form-control" id="tagFilter" placeholder="Filter by tag..." onkeyup="filterServers()">
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" id="statusFilter" onchange="filterServers()">
+                <option value="">All Statuses</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+            </select>
+        </div>
+    </div>
+</div>
 <div class="row">
     {% for server in servers %}
     <div class="col-md-6 col-lg-4 mb-4">
-        <div class="card server-card h-100">
+        <div class="card server-card h-100" data-server-id="{{ server.id }}" data-group="{{ server.group or '' }}" data-tags="{{ server.tags or '' }}" data-status="{{ 'active' if server.is_active else 'inactive' }}">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ server.name }}</h5>
                 <span class="badge {{ 'bg-success' if server.is_active else 'bg-danger' }}">
@@ -51,15 +82,15 @@
                     <small class="text-muted">Resources:</small>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="small">CPU:</span>
-                        <span class="small {{ 'text-danger' if server.cpu_usage > 80 else 'text-success' }}">{{ server.cpu_usage }}%</span>
+                        <span class="cpu-usage small {{ 'text-danger' if server.cpu_usage > 80 else 'text-success' }}">{{ server.cpu_usage }}%</span>
                     </div>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="small">RAM:</span>
-                        <span class="small {{ 'text-danger' if server.ram_usage > 80 else 'text-success' }}">{{ server.ram_usage }}%</span>
+                        <span class="ram-usage small {{ 'text-danger' if server.ram_usage > 80 else 'text-success' }}">{{ server.ram_usage }}%</span>
                     </div>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="small">Disk:</span>
-                        <span class="small {{ 'text-danger' if server.disk_usage > 80 else 'text-success' }}">{{ server.disk_usage }}%</span>
+                        <span class="disk-usage small {{ 'text-danger' if server.disk_usage > 80 else 'text-success' }}">{{ server.disk_usage }}%</span>
                     </div>
                 </div>
                 {% endif %}
@@ -132,6 +163,99 @@ function checkStatus(serverId) {
             btn.innerHTML = originalHtml;
             btn.disabled = false;
             alert('Error checking status');
+        });
+}
+
+// Auto-refresh resource monitoring every 30 seconds
+function updateResources() {
+    const serverCards = document.querySelectorAll('[data-server-id]');
+    serverCards.forEach(card => {
+        const serverId = card.dataset.serverId;
+        fetch('/api/resources/' + serverId)
+            .then(response => response.json())
+            .then(data => {
+                if (data && !data.error) {
+                    updateResourceDisplay(serverId, data);
+                }
+            })
+            .catch(error => console.log('Resource update failed for server ' + serverId));
+    });
+}
+
+function updateResourceDisplay(serverId, data) {
+    const card = document.querySelector(`[data-server-id="${serverId}"]`);
+    if (!card) return;
+    
+    const cpuElement = card.querySelector('.cpu-usage');
+    const ramElement = card.querySelector('.ram-usage');
+    const diskElement = card.querySelector('.disk-usage');
+    
+    if (cpuElement) {
+        cpuElement.textContent = data.cpu + '%';
+        cpuElement.className = 'small ' + (data.cpu > 80 ? 'text-danger' : 'text-success');
+    }
+    if (ramElement) {
+        ramElement.textContent = data.ram + '%';
+        ramElement.className = 'small ' + (data.ram > 80 ? 'text-danger' : 'text-success');
+    }
+    if (diskElement) {
+        diskElement.textContent = data.disk + '%';
+        diskElement.className = 'small ' + (data.disk > 80 ? 'text-danger' : 'text-success');
+    }
+}
+
+// Update every 30 seconds
+setInterval(updateResources, 30000);
+
+// Filter servers
+function filterServers() {
+    const groupFilter = document.getElementById('groupFilter').value.toLowerCase();
+    const tagFilter = document.getElementById('tagFilter').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    
+    const serverCards = document.querySelectorAll('.server-card');
+    
+    serverCards.forEach(card => {
+        const cardContainer = card.closest('.col-md-6');
+        const group = card.dataset.group ? card.dataset.group.toLowerCase() : '';
+        const tags = card.dataset.tags ? card.dataset.tags.toLowerCase() : '';
+        const status = card.dataset.status;
+        
+        let show = true;
+        
+        if (groupFilter && group !== groupFilter) show = false;
+        if (tagFilter && !tags.includes(tagFilter)) show = false;
+        if (statusFilter && status !== statusFilter) show = false;
+        
+        cardContainer.style.display = show ? '' : 'none';
+    });
+}
+
+// Bulk check all servers
+function checkAllServers() {
+    const btn = document.getElementById('checkAllBtn');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking All...';
+    btn.disabled = true;
+    
+    const serverCards = document.querySelectorAll('[data-server-id]');
+    const promises = [];
+    
+    serverCards.forEach(card => {
+        const serverId = card.dataset.serverId;
+        promises.push(fetch('/check-status/' + serverId).then(r => r.json()));
+    });
+    
+    Promise.all(promises)
+        .then(() => {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            location.reload();
+        })
+        .catch(error => {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            alert('Error checking servers');
         });
 }
 </script>
