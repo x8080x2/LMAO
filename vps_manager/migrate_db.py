@@ -2,42 +2,56 @@
 import os
 from sqlalchemy import create_engine, text
 
+# Get database URL from environment
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-def migrate_database():
-    engine = create_engine(DATABASE_URL)
-    
+if not DATABASE_URL:
+    print("ERROR: DATABASE_URL environment variable not set")
+    exit(1)
+
+print("Connecting to database...")
+engine = create_engine(DATABASE_URL)
+
+try:
     with engine.connect() as conn:
-        # Add missing columns if they don't exist
-        try:
+        # Check if version column exists
+        result = conn.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='deployments' AND column_name='version'
+        """))
+        
+        if result.fetchone() is None:
+            print("Adding 'version' column to deployments table...")
             conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS ssh_key TEXT;
-            """))
-            conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS "group" VARCHAR(50) DEFAULT 'default';
-            """))
-            conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS tags VARCHAR(255) DEFAULT '';
-            """))
-            conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS cpu_usage FLOAT DEFAULT 0.0;
-            """))
-            conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS ram_usage FLOAT DEFAULT 0.0;
-            """))
-            conn.execute(text("""
-                ALTER TABLE vps_servers 
-                ADD COLUMN IF NOT EXISTS disk_usage FLOAT DEFAULT 0.0;
+                ALTER TABLE deployments 
+                ADD COLUMN version INTEGER DEFAULT 1
             """))
             conn.commit()
-            print("✓ Database migration completed successfully")
-        except Exception as e:
-            print(f"Migration error: {e}")
-
-if __name__ == "__main__":
-    migrate_database()
+            print("✓ Added 'version' column")
+        else:
+            print("✓ 'version' column already exists")
+        
+        # Check if error_message column exists
+        result = conn.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='deployments' AND column_name='error_message'
+        """))
+        
+        if result.fetchone() is None:
+            print("Adding 'error_message' column to deployments table...")
+            conn.execute(text("""
+                ALTER TABLE deployments 
+                ADD COLUMN error_message TEXT
+            """))
+            conn.commit()
+            print("✓ Added 'error_message' column")
+        else:
+            print("✓ 'error_message' column already exists")
+        
+        print("\nMigration completed successfully!")
+        
+except Exception as e:
+    print(f"Migration failed: {str(e)}")
+    exit(1)
