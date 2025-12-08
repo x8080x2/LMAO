@@ -109,7 +109,14 @@
                         <a class="nav-link" href="/add-vps"><i class="bi bi-plus-circle me-1"></i>Add VPS</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/logs"><i class="bi bi-journal-text me-1"></i>Logs</a>
+                        <a class="nav-link" href="/dashboard">
+                            <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logs">
+                            <i class="bi bi-journal-text me-2"></i>Logs
+                        </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/settings"><i class="bi bi-gear me-1"></i>Settings</a>
@@ -130,7 +137,7 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        
+
         {% block content %}{% endblock %}
     </div>
 

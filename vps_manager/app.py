@@ -246,6 +246,30 @@ def index():
     return render_template('index.html', servers=servers)
 
 
+@app.route('/dashboard')
+def dashboard():
+    servers = VPSServer.query.all()
+    
+    active_count = sum(1 for s in servers if s.is_active)
+    inactive_count = len(servers) - active_count
+    total_deployments = Deployment.query.count()
+    
+    # Servers with high resource usage (>80%) or offline
+    critical_servers = [
+        s for s in servers 
+        if not s.is_active or s.cpu_usage > 80 or s.ram_usage > 80 or s.disk_usage > 80
+    ]
+    
+    high_resource_count = len([s for s in servers if s.cpu_usage > 80 or s.ram_usage > 80 or s.disk_usage > 80])
+    
+    return render_template('dashboard.html', 
+                         active_count=active_count,
+                         inactive_count=inactive_count,
+                         total_deployments=total_deployments,
+                         high_resource_count=high_resource_count,
+                         critical_servers=critical_servers)
+
+
 @app.route('/add-vps', methods=['GET', 'POST'])
 def add_vps():
     if request.method == 'POST':
@@ -552,6 +576,45 @@ def activate_ssl(server_id, deployment_id):
         return jsonify({'success': False, 'message': str(e)})
 
 
+@app.route('/bulk-check-status', methods=['POST'])
+def bulk_check_status():
+    servers = VPSServer.query.all()
+    results = []
+    
+    for server in servers:
+        password = decrypt_password_safe(server.ssh_password)
+        if password:
+            was_active = server.is_active
+            is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password)
+            
+            server.is_active = is_active
+            server.last_checked = datetime.utcnow()
+            
+            if is_active:
+                resources = get_server_resources(server)
+                if resources:
+                    server.cpu_usage = resources['cpu']
+                    server.ram_usage = resources['ram']
+                    server.disk_usage = resources['disk']
+            
+            results.append({
+                'id': server.id,
+                'name': server.name,
+                'active': is_active,
+                'message': message
+            })
+            
+            if was_active and not is_active:
+                settings = NotificationSettings.query.first()
+                if settings and settings.notify_offline:
+                    send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
+    
+    db.session.commit()
+    log_action('Bulk Status Check', f"Checked {len(servers)} servers")
+    
+    return jsonify({'success': True, 'results': results})
+
+
 @app.route('/delete-vps/<int:server_id>', methods=['POST'])
 def delete_vps(server_id):
     server = VPSServer.query.get_or_404(server_id)
@@ -624,6 +687,81 @@ def get_resources(server_id):
         db.session.commit()
     
     return jsonify(resources if resources else {'error': 'Failed to fetch resources'})
+
+
+@app.route('/backup')
+def backup_page():
+    return render_template('backup.html')
+
+
+@app.route('/backup/export')
+def backup_export():
+    import json
+    from flask import make_response
+    
+    servers = VPSServer.query.all()
+    backup_data = {
+        'version': '1.0',
+        'exported_at': datetime.utcnow().isoformat(),
+        'servers': []
+    }
+    
+    for server in servers:
+        backup_data['servers'].append({
+            'name': server.name,
+            'ip_address': server.ip_address,
+            'ssh_user': server.ssh_user,
+            'ssh_port': server.ssh_port,
+            'group': server.group,
+            'tags': server.tags
+        })
+    
+    response = make_response(json.dumps(backup_data, indent=2))
+    response.headers['Content-Type'] = 'application/json'
+    response.headers['Content-Disposition'] = f'attachment; filename=vps_backup_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.json'
+    
+    log_action('Backup Export', f'Exported {len(servers)} VPS configurations')
+    return response
+
+
+@app.route('/backup/import', methods=['POST'])
+def backup_import():
+    import json
+    
+    if 'backup_file' not in request.files:
+        flash('No file uploaded', 'error')
+        return redirect(url_for('backup_page'))
+    
+    file = request.files['backup_file']
+    
+    try:
+        data = json.load(file)
+        imported_count = 0
+        
+        for server_data in data.get('servers', []):
+            # Check if server already exists
+            existing = VPSServer.query.filter_by(ip_address=server_data['ip_address']).first()
+            if not existing:
+                server = VPSServer(
+                    name=server_data['name'],
+                    ip_address=server_data['ip_address'],
+                    ssh_user=server_data['ssh_user'],
+                    ssh_port=server_data.get('ssh_port', 22),
+                    group=server_data.get('group', 'default'),
+                    tags=server_data.get('tags', ''),
+                    is_active=False
+                )
+                db.session.add(server)
+                imported_count += 1
+        
+        db.session.commit()
+        log_action('Backup Import', f'Imported {imported_count} VPS configurations')
+        flash(f'Successfully imported {imported_count} VPS configurations. Please add credentials manually.', 'success')
+        
+    except Exception as e:
+        flash(f'Import failed: {str(e)}', 'error')
+    
+    return redirect(url_for('index'))
 
 
 with app.app_context():

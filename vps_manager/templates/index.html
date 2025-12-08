@@ -238,25 +238,24 @@ function checkAllServers() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking All...';
     btn.disabled = true;
     
-    const serverCards = document.querySelectorAll('[data-server-id]');
-    const promises = [];
-    
-    serverCards.forEach(card => {
-        const serverId = card.dataset.serverId;
-        promises.push(fetch('/check-status/' + serverId).then(r => r.json()));
-    });
-    
-    Promise.all(promises)
-        .then(() => {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
+    fetch('/bulk-check-status', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        if (data.success) {
             location.reload();
-        })
-        .catch(error => {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
+        } else {
             alert('Error checking servers');
-        });
+        }
+    })
+    .catch(error => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert('Error checking servers');
+    });
 }
 </script>
 {% endblock %}

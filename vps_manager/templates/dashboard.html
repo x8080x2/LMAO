@@ -1,0 +1,102 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-speedometer2 me-2"></i>Server Health Dashboard</h2>
+    <a href="/" class="btn btn-outline-light">
+        <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h3 class="text-success">{{ active_count }}</h3>
+                <p class="mb-0">Active Servers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h3 class="text-danger">{{ inactive_count }}</h3>
+                <p class="mb-0">Offline Servers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h3 class="text-info">{{ total_deployments }}</h3>
+                <p class="mb-0">Total Deployments</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h3 class="text-warning">{{ high_resource_count }}</h3>
+                <p class="mb-0">High Resource Usage</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Servers Needing Attention</h5>
+    </div>
+    <div class="card-body">
+        {% if critical_servers %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Server</th>
+                        <th>Status</th>
+                        <th>CPU</th>
+                        <th>RAM</th>
+                        <th>Disk</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in critical_servers %}
+                    <tr>
+                        <td>{{ server.name }}</td>
+                        <td>
+                            <span class="badge {{ 'bg-success' if server.is_active else 'bg-danger' }}">
+                                {{ 'Online' if server.is_active else 'Offline' }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="{{ 'text-danger' if server.cpu_usage > 80 else 'text-warning' if server.cpu_usage > 60 else 'text-success' }}">
+                                {{ server.cpu_usage }}%
+                            </span>
+                        </td>
+                        <td>
+                            <span class="{{ 'text-danger' if server.ram_usage > 80 else 'text-warning' if server.ram_usage > 60 else 'text-success' }}">
+                                {{ server.ram_usage }}%
+                            </span>
+                        </td>
+                        <td>
+                            <span class="{{ 'text-danger' if server.disk_usage > 80 else 'text-warning' if server.disk_usage > 60 else 'text-success' }}">
+                                {{ server.disk_usage }}%
+                            </span>
+                        </td>
+                        <td>
+                            <a href="/vps/{{ server.id }}" class="btn btn-sm btn-primary">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-center text-muted mb-0">All servers are running optimally!</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
