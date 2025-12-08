@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>
+            <i class="bi bi-server me-2"></i>{{ server.name }}
+            <span class="badge {{ 'bg-success' if server.is_active else 'bg-danger' }} ms-2">
+                {{ 'Active' if server.is_active else 'Inactive' }}
+            </span>
+        </h2>
+        <p class="text-muted mb-0">{{ server.ip_address }} | {{ server.ssh_user }}@{{ server.ssh_port }}</p>
+    </div>
+    <div>
+        <button class="btn btn-outline-light me-2" onclick="checkStatus()">
+            <i class="bi bi-arrow-repeat me-1"></i>Refresh Status
+        </button>
+        <a href="/" class="btn btn-outline-light">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-rocket-takeoff me-2"></i>Deploy Project</h5>
+            </div>
+            <div class="card-body">
+                {% if server.is_active %}
+                <p>Deploy the PHP evidence project to this server with a custom domain.</p>
+                <a href="/vps/{{ server.id }}/deploy" class="btn btn-primary w-100">
+                    <i class="bi bi-cloud-upload me-1"></i>Deploy Now
+                </a>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">Server is offline. Check connection first.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Deployments</h5>
+            </div>
+            <div class="card-body">
+                {% if deployments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Status</th>
+                                <th>SSL</th>
+                                <th>Deployed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for deployment in deployments %}
+                            <tr>
+                                <td>
+                                    {{ deployment.domain }}
+                                    {% if deployment.is_wildcard %}
+                                    <span class="badge bg-info ms-1">Wildcard</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {{ 'bg-success' if deployment.status == 'deployed' else 'bg-warning' if deployment.status == 'deploying' else 'bg-danger' }}">
+                                        {{ deployment.status | capitalize }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if deployment.ssl_enabled %}
+                                    <span class="text-success"><i class="bi bi-shield-check"></i> Enabled</span>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-outline-success" onclick="activateSSL({{ server.id }}, {{ deployment.id }})" id="ssl-btn-{{ deployment.id }}" {% if deployment.status != 'deployed' %}disabled{% endif %}>
+                                        <i class="bi bi-shield-plus me-1"></i>Activate SSL
+                                    </button>
+                                    {% endif %}
+                                </td>
+                                <td>{{ deployment.deployed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if deployment.status == 'deployed' and deployment.ssl_enabled %}
+                                    <a href="{{ deployment.admin_url }}" target="_blank" class="btn btn-sm btn-success">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>Admin Panel
+                                    </a>
+                                    {% elif deployment.status == 'deployed' %}
+                                    <a href="http://{{ deployment.domain }}/admin" target="_blank" class="btn btn-sm btn-outline-light">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>View (HTTP)
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox" style="font-size: 3rem; color: #0f3460;"></i>
+                    <p class="mt-2 text-muted">No deployments yet. Deploy your first project!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkStatus() {
+    fetch('/check-status/{{ server.id }}')
+        .then(response => response.json())
+        .then(data => {
+            location.reload();
+        });
+}
+
+function activateSSL(serverId, deploymentId) {
+    const btn = document.getElementById('ssl-btn-' + deploymentId);
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Installing SSL...';
+    btn.disabled = true;
+    
+    fetch('/vps/' + serverId + '/deployment/' + deploymentId + '/ssl', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('SSL activated successfully!\n\nAdmin URL: ' + data.admin_url);
+            location.reload();
+        } else {
+            alert('SSL activation failed: ' + data.message);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error activating SSL');
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

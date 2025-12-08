@@ -1,6 +1,44 @@
+modules = ["python-3.11"]
 [nix]
 channel = "stable-25_05"
-packages = ["unzip"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "unzip"]
 
 [agent]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+ENCRYPTION_KEY = "fSkC3SARMDjYizobXbESgx3cCbFzTG3qJZntkuEpRxE="
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "VPS Manager"
+
+[[workflows.workflow]]
+name = "VPS Manager"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd vps_manager && python app.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 39391
+externalPort = 3000

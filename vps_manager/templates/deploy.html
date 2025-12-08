@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Deploy to {{ server.name }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Server:</strong> {{ server.ip_address }}
+                </div>
+                
+                <form method="POST" id="deployForm">
+                    <div class="mb-3">
+                        <label for="domain" class="form-label">Domain Name</label>
+                        <input type="text" class="form-control" id="domain" name="domain" placeholder="e.g., example.com" required>
+                        <small class="text-muted">Enter the domain without http:// or https://</small>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_wildcard" name="is_wildcard">
+                            <label class="form-check-label" for="is_wildcard">
+                                Enable Wildcard SSL (*.domain.com)
+                            </label>
+                        </div>
+                        <small class="text-muted">Wildcard SSL requires DNS verification. Make sure your domain's DNS is properly configured.</small>
+                    </div>
+                    
+                    <div class="card bg-dark mb-4">
+                        <div class="card-body">
+                            <h6><i class="bi bi-list-check me-2"></i>Deployment Steps:</h6>
+                            <ol class="mb-0 ps-3">
+                                <li>Install Apache, PHP, and required extensions</li>
+                                <li>Configure virtual host for domain</li>
+                                <li>Upload project files via SFTP</li>
+                                <li>Set proper file permissions</li>
+                                <li>Enable Apache site configuration</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary" id="deployBtn">
+                            <i class="bi bi-rocket-takeoff me-1"></i>Start Deployment
+                        </button>
+                        <a href="/vps/{{ server.id }}" class="btn btn-outline-light">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('deployForm').addEventListener('submit', function() {
+    const btn = document.getElementById('deployBtn');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Deploying... This may take a few minutes';
+    btn.disabled = true;
+});
+</script>
+{% endblock %}
