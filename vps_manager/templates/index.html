@@ -32,6 +32,37 @@
                     <i class="bi bi-ethernet me-2"></i>
                     <strong>Port:</strong> {{ server.ssh_port }}
                 </p>
+                {% if server.group and server.group != 'default' %}
+                <p class="mb-2">
+                    <i class="bi bi-folder me-2"></i>
+                    <span class="badge bg-primary">{{ server.group }}</span>
+                </p>
+                {% endif %}
+                {% if server.tags %}
+                <p class="mb-2">
+                    <i class="bi bi-tags me-2"></i>
+                    {% for tag in server.tags.split(',') %}
+                    <span class="badge bg-info me-1">{{ tag.strip() }}</span>
+                    {% endfor %}
+                </p>
+                {% endif %}
+                {% if server.is_active and server.cpu_usage > 0 %}
+                <div class="mb-2">
+                    <small class="text-muted">Resources:</small>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small">CPU:</span>
+                        <span class="small {{ 'text-danger' if server.cpu_usage > 80 else 'text-success' }}">{{ server.cpu_usage }}%</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small">RAM:</span>
+                        <span class="small {{ 'text-danger' if server.ram_usage > 80 else 'text-success' }}">{{ server.ram_usage }}%</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small">Disk:</span>
+                        <span class="small {{ 'text-danger' if server.disk_usage > 80 else 'text-success' }}">{{ server.disk_usage }}%</span>
+                    </div>
+                </div>
+                {% endif %}
                 <p class="mb-0 text-muted small">
                     <i class="bi bi-clock me-1"></i>
                     Last checked: {{ server.last_checked.strftime('%Y-%m-%d %H:%M') if server.last_checked else 'Never' }}

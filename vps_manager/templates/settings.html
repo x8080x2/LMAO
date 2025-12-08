@@ -1,0 +1,94 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-gear me-2"></i>Notification Settings</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <h5 class="mb-3"><i class="bi bi-telegram me-2"></i>Telegram Notifications</h5>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="telegram_enabled" name="telegram_enabled" {{ 'checked' if settings and settings.telegram_enabled }}>
+                        <label class="form-check-label" for="telegram_enabled">Enable Telegram Notifications</label>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="telegram_bot_token" class="form-label">Bot Token</label>
+                        <input type="text" class="form-control" id="telegram_bot_token" name="telegram_bot_token" value="{{ settings.telegram_bot_token if settings else '' }}" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="telegram_chat_id" class="form-label">Chat ID</label>
+                        <input type="text" class="form-control" id="telegram_chat_id" name="telegram_chat_id" value="{{ settings.telegram_chat_id if settings else '' }}" placeholder="123456789">
+                    </div>
+                    
+                    <hr>
+                    
+                    <h5 class="mb-3 mt-4"><i class="bi bi-envelope me-2"></i>Email Notifications</h5>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="email_enabled" name="email_enabled" {{ 'checked' if settings and settings.email_enabled }}>
+                        <label class="form-check-label" for="email_enabled">Enable Email Notifications</label>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label for="email_smtp_server" class="form-label">SMTP Server</label>
+                                <input type="text" class="form-control" id="email_smtp_server" name="email_smtp_server" value="{{ settings.email_smtp_server if settings else '' }}" placeholder="smtp.gmail.com">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="email_smtp_port" class="form-label">Port</label>
+                                <input type="number" class="form-control" id="email_smtp_port" name="email_smtp_port" value="{{ settings.email_smtp_port if settings else 587 }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email_username" class="form-label">Email Username</label>
+                        <input type="email" class="form-control" id="email_username" name="email_username" value="{{ settings.email_username if settings else '' }}" placeholder="your-email@example.com">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email_password" class="form-label">Email Password</label>
+                        <input type="password" class="form-control" id="email_password" name="email_password" placeholder="Leave blank to keep current password">
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="email_recipient" class="form-label">Recipient Email</label>
+                        <input type="email" class="form-control" id="email_recipient" name="email_recipient" value="{{ settings.email_recipient if settings else '' }}" placeholder="recipient@example.com">
+                    </div>
+                    
+                    <hr>
+                    
+                    <h5 class="mb-3 mt-4"><i class="bi bi-bell me-2"></i>Alert Preferences</h5>
+                    
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="notify_offline" name="notify_offline" {{ 'checked' if not settings or settings.notify_offline }}>
+                        <label class="form-check-label" for="notify_offline">Notify when server goes offline</label>
+                    </div>
+                    
+                    <div class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" id="notify_deployment" name="notify_deployment" {{ 'checked' if not settings or settings.notify_deployment }}>
+                        <label class="form-check-label" for="notify_deployment">Notify on deployment success/failure</label>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i>Save Settings
+                        </button>
+                        <a href="/" class="btn btn-outline-light">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

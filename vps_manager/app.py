@@ -49,6 +49,11 @@ class VPSServer(db.Model):
     is_active = db.Column(db.Boolean, default=False)
     last_checked = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    group = db.Column(db.String(50), default='default')
+    tags = db.Column(db.String(255), default='')
+    cpu_usage = db.Column(db.Float, default=0.0)
+    ram_usage = db.Column(db.Float, default=0.0)
+    disk_usage = db.Column(db.Float, default=0.0)
     
     deployments = db.relationship('Deployment', backref='server', lazy=True)
 
@@ -64,6 +69,21 @@ class Deployment(db.Model):
     status = db.Column(db.String(50), default='pending')
     deployed_at = db.Column(db.DateTime, default=datetime.utcnow)
     admin_url = db.Column(db.String(500))
+    version = db.Column(db.Integer, default=1)
+    error_message = db.Column(db.Text)
+    
+    history = db.relationship('DeploymentHistory', backref='deployment', lazy=True, order_by='DeploymentHistory.created_at.desc()')
+
+
+class DeploymentHistory(db.Model):
+    __tablename__ = 'deployment_history'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    deployment_id = db.Column(db.Integer, db.ForeignKey('deployments.id'), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(50), nullable=False)
+    details = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class AuditLog(db.Model):
@@ -76,10 +96,69 @@ class AuditLog(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class NotificationSettings(db.Model):
+    __tablename__ = 'notification_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_enabled = db.Column(db.Boolean, default=False)
+    telegram_bot_token = db.Column(db.String(255))
+    telegram_chat_id = db.Column(db.String(100))
+    email_enabled = db.Column(db.Boolean, default=False)
+    email_smtp_server = db.Column(db.String(255))
+    email_smtp_port = db.Column(db.Integer, default=587)
+    email_username = db.Column(db.String(255))
+    email_password = db.Column(db.Text)
+    email_recipient = db.Column(db.String(255))
+    notify_offline = db.Column(db.Boolean, default=True)
+    notify_deployment = db.Column(db.Boolean, default=True)
+
+
 def log_action(action, details=None, server_id=None):
     log = AuditLog(action=action, details=details, server_id=server_id)
     db.session.add(log)
     db.session.commit()
+
+
+def send_notification(message, notification_type='info'):
+    settings = NotificationSettings.query.first()
+    if not settings:
+        return
+    
+    if settings.telegram_enabled and settings.telegram_bot_token and settings.telegram_chat_id:
+        try:
+            import requests
+            url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+            data = {
+                'chat_id': settings.telegram_chat_id,
+                'text': f"🔔 VPS Manager Alert\n\n{message}",
+                'parse_mode': 'HTML'
+            }
+            requests.post(url, data=data, timeout=5)
+        except Exception as e:
+            print(f"Telegram notification failed: {e}")
+    
+    if settings.email_enabled and settings.email_smtp_server:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            
+            msg = MIMEMultipart()
+            msg['From'] = settings.email_username
+            msg['To'] = settings.email_recipient
+            msg['Subject'] = f"VPS Manager Alert - {notification_type.upper()}"
+            msg.attach(MIMEText(message, 'plain'))
+            
+            password = decrypt_password_safe(settings.email_password) if settings.email_password else ''
+            
+            server = smtplib.SMTP(settings.email_smtp_server, settings.email_smtp_port)
+            server.starttls()
+            if password:
+                server.login(settings.email_username, password)
+            server.send_message(msg)
+            server.quit()
+        except Exception as e:
+            print(f"Email notification failed: {e}")
 
 
 def check_server_status(ip, port, username, password, timeout=10):
@@ -115,6 +194,43 @@ def execute_ssh_command(ip, port, username, password, command, timeout=60):
         return False, "", str(e)
 
 
+def get_server_resources(server):
+    password = decrypt_password_safe(server.ssh_password)
+    if not password:
+        return None
+    
+    try:
+        # Get CPU usage
+        success, cpu_output, _ = execute_ssh_command(
+            server.ip_address, server.ssh_port, server.ssh_user, password,
+            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1", timeout=10
+        )
+        cpu_usage = float(cpu_output.strip()) if success and cpu_output.strip() else 0.0
+        
+        # Get RAM usage
+        success, ram_output, _ = execute_ssh_command(
+            server.ip_address, server.ssh_port, server.ssh_user, password,
+            "free | grep Mem | awk '{print ($3/$2) * 100.0}'", timeout=10
+        )
+        ram_usage = float(ram_output.strip()) if success and ram_output.strip() else 0.0
+        
+        # Get Disk usage
+        success, disk_output, _ = execute_ssh_command(
+            server.ip_address, server.ssh_port, server.ssh_user, password,
+            "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1", timeout=10
+        )
+        disk_usage = float(disk_output.strip()) if success and disk_output.strip() else 0.0
+        
+        return {
+            'cpu': round(cpu_usage, 2),
+            'ram': round(ram_usage, 2),
+            'disk': round(disk_usage, 2)
+        }
+    except Exception as e:
+        print(f"Resource monitoring failed: {e}")
+        return None
+
+
 @app.route('/')
 def index():
     servers = VPSServer.query.all()
@@ -129,6 +245,8 @@ def add_vps():
         ssh_user = request.form.get('ssh_user')
         ssh_password = request.form.get('ssh_password')
         ssh_port = int(request.form.get('ssh_port', 22))
+        group = request.form.get('group', 'default')
+        tags = request.form.get('tags', '')
         
         is_active, message = check_server_status(ip_address, ssh_port, ssh_user, ssh_password)
         
@@ -141,7 +259,9 @@ def add_vps():
             ssh_password=encrypted_pass,
             ssh_port=ssh_port,
             is_active=is_active,
-            last_checked=datetime.utcnow()
+            last_checked=datetime.utcnow(),
+            group=group,
+            tags=tags
         )
         
         db.session.add(server)
@@ -153,10 +273,15 @@ def add_vps():
             flash(f'VPS "{name}" added successfully and is ACTIVE!', 'success')
         else:
             flash(f'VPS "{name}" added but connection failed: {message}', 'warning')
+            settings = NotificationSettings.query.first()
+            if settings and settings.notify_offline:
+                send_notification(f"⚠️ VPS '{name}' ({ip_address}) is OFFLINE\n{message}", 'warning')
         
         return redirect(url_for('index'))
     
-    return render_template('add_vps.html')
+    groups = db.session.query(VPSServer.group).distinct().all()
+    groups = [g[0] for g in groups if g[0]]
+    return render_template('add_vps.html', groups=groups)
 
 
 @app.route('/check-status/<int:server_id>')
@@ -167,15 +292,37 @@ def check_status(server_id):
     if password is None:
         return jsonify({'active': False, 'message': 'Failed to decrypt credentials. Server may need to be re-added.'})
     
+    was_active = server.is_active
     is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password)
     
     server.is_active = is_active
     server.last_checked = datetime.utcnow()
+    
+    # Get resource usage if server is active
+    if is_active:
+        resources = get_server_resources(server)
+        if resources:
+            server.cpu_usage = resources['cpu']
+            server.ram_usage = resources['ram']
+            server.disk_usage = resources['disk']
+    
     db.session.commit()
     
     log_action('Status Check', f"Checked {server.name}: {'Active' if is_active else 'Inactive'} - {message}", server.id)
     
-    return jsonify({'active': is_active, 'message': message})
+    # Send notification if server went offline
+    if was_active and not is_active:
+        settings = NotificationSettings.query.first()
+        if settings and settings.notify_offline:
+            send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
+    
+    return jsonify({
+        'active': is_active, 
+        'message': message,
+        'cpu': server.cpu_usage,
+        'ram': server.ram_usage,
+        'disk': server.disk_usage
+    })
 
 
 @app.route('/vps/<int:server_id>')
@@ -219,9 +366,34 @@ def deploy(server_id):
             deployment.status = 'deployed'
             deployment.admin_url = f"https://{domain}/admin"
             flash(f'Project deployed successfully to {domain}!', 'success')
+            
+            history = DeploymentHistory(
+                deployment_id=deployment.id,
+                action='Deployment',
+                status='success',
+                details=f'Successfully deployed to {domain}'
+            )
+            db.session.add(history)
+            
+            settings = NotificationSettings.query.first()
+            if settings and settings.notify_deployment:
+                send_notification(f"✅ Deployment successful\nDomain: {domain}\nServer: {server.name}", 'success')
         else:
             deployment.status = 'failed'
+            deployment.error_message = result
             flash(f'Deployment failed: {result}', 'error')
+            
+            history = DeploymentHistory(
+                deployment_id=deployment.id,
+                action='Deployment',
+                status='failed',
+                details=f'Deployment failed: {result}'
+            )
+            db.session.add(history)
+            
+            settings = NotificationSettings.query.first()
+            if settings and settings.notify_deployment:
+                send_notification(f"❌ Deployment failed\nDomain: {domain}\nServer: {server.name}\nError: {result}", 'error')
         
         db.session.commit()
         
@@ -387,6 +559,59 @@ def delete_vps(server_id):
 def view_logs():
     logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(100).all()
     return render_template('logs.html', logs=logs)
+
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    notification_settings = NotificationSettings.query.first()
+    
+    if request.method == 'POST':
+        if not notification_settings:
+            notification_settings = NotificationSettings()
+            db.session.add(notification_settings)
+        
+        notification_settings.telegram_enabled = request.form.get('telegram_enabled') == 'on'
+        notification_settings.telegram_bot_token = request.form.get('telegram_bot_token', '')
+        notification_settings.telegram_chat_id = request.form.get('telegram_chat_id', '')
+        
+        notification_settings.email_enabled = request.form.get('email_enabled') == 'on'
+        notification_settings.email_smtp_server = request.form.get('email_smtp_server', '')
+        notification_settings.email_smtp_port = int(request.form.get('email_smtp_port', 587))
+        notification_settings.email_username = request.form.get('email_username', '')
+        
+        email_password = request.form.get('email_password', '')
+        if email_password:
+            notification_settings.email_password = encrypt_password(email_password)
+        
+        notification_settings.email_recipient = request.form.get('email_recipient', '')
+        notification_settings.notify_offline = request.form.get('notify_offline') == 'on'
+        notification_settings.notify_deployment = request.form.get('notify_deployment') == 'on'
+        
+        db.session.commit()
+        
+        log_action('Settings Updated', 'Notification settings updated')
+        flash('Settings saved successfully!', 'success')
+        return redirect(url_for('settings'))
+    
+    return render_template('settings.html', settings=notification_settings)
+
+
+@app.route('/api/resources/<int:server_id>')
+def get_resources(server_id):
+    server = VPSServer.query.get_or_404(server_id)
+    
+    if not server.is_active:
+        return jsonify({'error': 'Server is offline'})
+    
+    resources = get_server_resources(server)
+    
+    if resources:
+        server.cpu_usage = resources['cpu']
+        server.ram_usage = resources['ram']
+        server.disk_usage = resources['disk']
+        db.session.commit()
+    
+    return jsonify(resources if resources else {'error': 'Failed to fetch resources'})
 
 
 with app.app_context():
