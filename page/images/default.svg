@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" fill="none" viewBox="0 0 1920 1080">
+    <defs>
+        <!-- Base Gradients -->
+        <linearGradient id="bg-main" x1="960" x2="904.886" y1="0" y2="653.185" gradientUnits="userSpaceOnUse">
+            <stop offset=".093" stop-color="#EAEAF3" />
+            <stop offset=".397" stop-color="#F5F2F5" />
+            <stop offset=".777" stop-color="#FCF9F7" />
+            <stop offset=".967" stop-color="#FBF8F6" />
+        </linearGradient>
+
+        <!-- Mountain Gradients -->
+        <linearGradient id="mountain-primary" x1="828.961" x2="828.961" y1="-2.405" y2="718.833" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#E5ECF7" />
+            <stop offset=".409" stop-color="#F4F4F9" />
+            <stop offset=".903" stop-color="#FAFFFC" />
+        </linearGradient>
+
+        <!-- Water Gradients -->
+        <linearGradient id="water-base" x1="43.237" x2="1082.76" y1="815.679" y2="905.479" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#E5F5FC" />
+            <stop offset=".223" stop-color="#EFF0F7" />
+            <stop offset=".641" stop-color="#F7F7FB" />
+            <stop offset="1" stop-color="#FCF8F7" />
+        </linearGradient>
+
+        <!-- Right Panel Gradients -->
+        <linearGradient id="panel-main" x1="804.396" x2="1478.43" y1="720.534" y2="699.154" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#EBEAF5" />
+            <stop offset=".063" stop-color="#F5F5FA" />
+            <stop offset=".482" stop-color="#EFECF6" />
+            <stop offset=".954" stop-color="#FAFFFF" />
+        </linearGradient>
+
+        <!-- Cloud Gradients -->
+        <linearGradient id="cloud-base" x1="1756.91" x2="1579.45" y1="-.668" y2="432.695" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#DEE2F0" />
+            <stop offset=".349" stop-color="#EBECF4" />
+            <stop offset=".724" stop-color="#F6F1F4" />
+            <stop offset="1" stop-color="#EFF0F7" />
+        </linearGradient>
+
+        <!-- Accent Gradients -->
+        <radialGradient id="accent-1" cx="0" cy="0" r="1" gradientTransform="matrix(954.65445 6.41491 -8.12276 1208.8127 19.72 594.454)" gradientUnits="userSpaceOnUse">
+            <stop offset=".367" stop-color="#E9E6F2" />
+            <stop offset="1" stop-color="#EBE8F3" stop-opacity="0" />
+        </radialGradient>
+
+        <clipPath id="main-clip"><path fill="#fff" d="M0 0h1920v1080H0z" /></clipPath>
+    </defs>
+
+    <g clip-path="url(#main-clip)">
+        <!-- Background Layer -->
+        <g id="background">
+            <rect width="1920" height="1082.94" fill="url(#bg-main)" />
+            <rect width="1920" height="1082.94" fill="url(#accent-1)" />
+        </g>
+
+        <!-- Mountain Formations -->
+        <g id="mountains">
+            <!-- Left Mountain Group -->
+            <g id="left-mountains" opacity="0.3">
+                <path fill="url(#mountain-primary)" d="M196.111 787.35 30.409 577.817l-62.004 51.849C2.185 690.815 83.86 800 123.416 845.078z" />
+                <path fill="url(#mountain-primary)" d="M211.612 769.176C136.779 702.895 41.456 571.581 3.148 514.209c5.132-11.545 25.301-32.962 34.744-42.227 89.8 117.595 184.232 225.034 220.223 264.054z" />
+                <path fill="url(#mountain-primary)" d="M161.367 579.955c-15.395-14.966-91.76-106.726-121.871-142.182l44.365-45.434c14.111 17.532 72.339 81.069 93.541 102.093z" />
+            </g>
+
+            <!-- Center Mountain Group -->
+            <g id="center-mountains" opacity="0.3">
+                <path fill="url(#mountain-primary)" d="m399.763 352.249-64.142 52.918c27.795 47.893 129.532 168.196 176.926 222.361l60.936-46.504c-39.341-45.327-132.205-171.403-173.72-228.775" />
+                <path fill="url(#mountain-primary)" d="M571.344 560.713c-53.879-54.308-132.204-173.72-164.632-226.637l48.641-45.969c22.236 43.189 125.791 169.087 174.789 226.637z" />
+                <path fill="url(#mountain-primary)" d="M633.349 488.552c-82.958-95.786-150.735-197.06-174.254-235.724l48.641-35.278c20.098 33.354 126.326 165.345 176.927 227.172z" />
+            </g>
+
+            <!-- Main Mountain -->
+            <g id="main-mountain">
+                <path fill="url(#mountain-primary)" d="M546.89 12.294c.107-5.131 3.608-11.938 5.345-14.7l480.805.252c14.3 82.45 48.64 174.938 70.15 222.377 13.49 29.739 8.56 37.951-2.54 55.055-115.453 183.475-180.263 423.876-181.867 431.359s-2.672 19.777-20.846 5.88-153.141-115.323-257.105-316.971C536.73 193.631 546.756 18.708 546.89 12.294" />
+            </g>
+        </g>
+
+        <!-- Cloud Formation -->
+        <g id="clouds">
+            <path fill="url(#cloud-base)" d="M1160.92 114.521c-1.39-11.439-10.07-87.556-13.9-121.187h645.62l128.9 23.503-.53 173.854c-292.38 41.158-372.43 64.276-452.34 81.782-79.91 17.505-236.1 58.349-253.23 62.939-14.24 3.816-22.85-1.47-25.79-13.63-1.93-8.009-26.99-192.963-28.73-207.261" />
+
+            <!-- Star Field -->
+            <g id="stars">
+                <circle cx="1263.55" cy="268.864" r="1.336" fill="#FFFDF7" />
+                <circle cx="1371.26" cy="154.477" r="1.336" fill="#FFFDF7" />
+                <circle cx="1345.87" cy="184.143" r="1.336" fill="#FFFDF7" />
+                <circle cx="1424.44" cy="144.588" r="1.336" fill="#FFFDF7" />
+                <circle cx="1591.21" cy="152.873" r="1.336" fill="#FFFDF7" />
+                <circle cx="1691.7" cy="155.546" r="1.336" fill="#FFFDF7" />
+                <circle cx="1706.4" cy="186.281" r="1.336" fill="#FFFDF7" />
+                <circle cx="1637.71" cy="187.617" r="1.336" fill="#FFFDF7" />
+                <circle cx="1762.26" cy="203.92" r="1.336" fill="#FFFDF7" />
+                <circle cx="1856.87" cy="175.857" r="1.336" fill="#FFFDF7" />
+                <circle cx="1588.54" cy="208.998" r="1.336" fill="#FFFDF7" />
+                <circle cx="1584.53" cy="223.43" r="1.336" fill="#FFFDF7" />
+                <circle cx="1571.43" cy="231.18" r="1.336" fill="#FFFDF7" />
+                <circle cx="1902.84" cy="165.434" r="1.336" fill="#FFFDF7" />
+                <circle cx="1433.79" cy="118.396" r="1.336" fill="#FFFDF7" />
+                <circle cx="1201.28" cy="160.757" r="1.336" fill="#FFFDF7" />
+                <circle cx="1234.02" cy="121.069" r="1.336" fill="#FFFDF7" />
+                <circle cx="1268.63" cy="114.922" r="1.336" fill="#FFFDF7" />
+                <circle cx="1238.96" cy="5.88" r="1.336" fill="#FFFDF7" />
+                <ellipse cx="1216.51" cy="219.02" fill="#FFFDF7" rx="1.336" ry="1.069" />
+                <ellipse cx="1290.41" cy="175.056" fill="#FFFDF7" rx="1.336" ry="1.069" />
+                <circle cx="1254.86" cy="277.817" r=".802" fill="#FFFDF7" />
+                <circle cx="1241.1" cy="281.158" r=".802" fill="#fff" />
+                <circle cx="1202.08" cy="268.062" r=".802" fill="#fff" />
+                <circle cx="1221.46" cy="235.857" r=".802" fill="#fff" />
+                <circle cx="1278.25" cy="123.207" r=".802" fill="#FFFDF7" />
+                <circle cx="1206.09" cy="59.332" r=".802" fill="#FFFDF7" />
+                <circle cx="1190.05" cy="51.581" r=".802" fill="#FFFDF7" />
+                <circle cx="1182.84" cy="101.559" r=".802" fill="#FFFDF7" />
+                <circle cx="1292.55" cy="124.811" r=".802" fill="#FFFDF7" />
+                <circle cx="1283.06" cy="161.292" r=".802" fill="#FFFDF7" />
+                <circle cx="1262.75" cy="185.479" r=".802" fill="#FFFDF7" />
+                <circle cx="1314.86" cy="77.505" r=".802" fill="#FFFDF7" />
+                <circle cx="1318.34" cy="105.835" r=".802" fill="#FFFDF7" />
+                <circle cx="1286" cy="96.214" r=".802" fill="#FFFDF7" />
+                <circle cx="1274.51" cy="95.412" r=".802" fill="#FFFDF7" />
+                <circle cx="1417.49" cy="84.722" r=".802" fill="#FFFDF7" />
+                <circle cx="1379.27" cy="273.14" r=".802" fill="#FFFDF7" />
+                <circle cx="1338.92" cy="175.323" r=".802" fill="#FFFDF7" />
+                <circle cx="1328.76" cy="155.011" r=".802" fill="#FFFDF7" />
+                <circle cx="1477.36" cy="99.955" r=".802" fill="#FFFDF7" />
+                <circle cx="1504.62" cy="77.505" r=".802" fill="#FFFDF7" />
+                <circle cx="1526.27" cy="95.412" r=".802" fill="#FFFDF7" />
+                <circle cx="1526.27" cy="118.396" r=".802" fill="#FFFDF7" />
+                <circle cx="1623.82" cy="165.434" r=".802" fill="#FFFDF7" />
+                <circle cx="1735.26" cy="163.831" r=".802" fill="#FFFDF7" />
+                <circle cx="1744.08" cy="159.02" r=".802" fill="#FFFDF7" />
+                <circle cx="1765.73" cy="139.51" r=".802" fill="#FFFDF7" />
+                <circle cx="1749.16" cy="135.501" r=".802" fill="#F3F8FF" />
+                <circle cx="1702.39" cy="51.047" r=".802" fill="#F3F8FF" />
+                <circle cx="1647.6" cy="28.597" r=".802" fill="#F3F8FF" />
+                <circle cx="1595.22" cy="209.532" r=".802" fill="#F3F8FF" />
+                <circle cx="1365.11" cy="36.08" r=".802" fill="#F3F8FF" />
+                <circle cx="1344.26" cy="12.027" r=".802" fill="#F3F8FF" />
+                <circle cx="1424.97" cy="27.795" r=".802" fill="#F3F8FF" />
+                <circle cx="1603.77" cy="10.423" r=".802" fill="#F3F8FF" />
+                <circle cx="1268.63" cy="272.339" r=".802" fill="#F3F8FF" />
+                <circle cx="1603.5" cy="221.292" r=".802" fill="#F3F8FF" />
+                <circle cx="1622.21" cy="20.044" r=".802" fill="#F3F8FF" />
+                <circle cx="1671.66" cy="168.784" r=".802" fill="#F3F8FF" />
+                <circle cx="1777.22" cy="123.207" r=".802" fill="#FFFDF7" />
+                <circle cx="1776.42" cy="114.655" r=".802" fill="#FFFDF7" />
+                <circle cx="1800.48" cy="138.174" r=".802" fill="#FFFDF7" />
+                <circle cx="1811.43" cy="169.586" r=".802" fill="#FFFDF7" />
+                <circle cx="1788.18" cy="177.996" r=".802" fill="#FFFDF7" />
+                <circle cx="1820.52" cy="182.272" r=".802" fill="#FFFDF7" />
+                <circle cx="1890.01" cy="119.198" r=".802" fill="#FFFDF7" />
+                <circle cx="1585.87" cy="62.272" r=".802" fill="#FFFDF7" />
+                <circle cx="1562.08" cy="40.089" r=".802" fill="#FFFDF7" />
+                <circle cx="1195.8" cy="181.737" r=".802" fill="#fff" />
+                <circle cx="1184.44" cy="195.234" r=".802" fill="#fff" />
+                <circle cx="1177.09" cy="191.626" r=".802" fill="#fff" />
+            </g>
+        </g>
+
+        <!-- Right Panel -->
+        <g id="right-panel">
+            <path fill="url(#panel-main)" d="m814.552 1084.54-17.64-608.015c351.718-54.654 522.968 39.269 565.658 69.355 14.03 9.888 21.14 13.704 28.86 31.403 20.58 47.171 62.14 151.03 93.54 256.035 28.09 93.917 51.72 189.352 64.55 251.222z" />
+
+            <!-- Panel Decorations -->
+            <g id="panel-stars">
+                <circle cx="910.498" cy="737.906" r=".802" fill="#fff" />
+                <circle cx="1101.32" cy="944.766" r=".802" fill="#fff" />
+                <circle cx="977.447" cy="745.857" r=".535" fill="#fff" />
+                <!-- ...existing panel decoration elements... -->
+            </g>
+        </g>
+
+        <!-- Water and Reflection -->
+        <g id="water">
+            <path fill="url(#water-base)" d="M34.685 837.261c-2.272-12.428-1.875-17.253 4.143-24.522 50.78-61.336 156.748-154.877 196.703-189.755S358.739 517.416 365.955 511.67s16.703-2.405 23.919 5.746c5.773 6.521 20.49 21.426 27.127 28.063 47.974 50.512 118.53 104.632 180.268 148.196S766.187 797.21 885.91 838.396c94.546 32.525 170.41 46.754 185.2 49.528l.61.116c13.17 2.472 11.96 15.033 9.42 20.379-2.54 5.345-35.81 56.392-44.76 69.755-7.16 10.69-49.579 73.136-69.891 103.026H146.801c-26.993-44.1-39.956-67.88-63.207-115.855-23.252-47.973-46.637-115.657-48.909-128.084" />
+
+            <!-- Water Effects -->
+            <g id="water-particles">
+                <ellipse cx="123.337" cy="827.7" fill="#F7FEFF" rx="1.014" ry="1.19" transform="rotate(3.292 123.337 827.7)" />
+                <ellipse cx="202.981" cy="722.934" fill="#F7FEFF" rx="1.014" ry="1.19" transform="rotate(3.292 202.981 722.934)" />
+                <ellipse cx="216.45" cy="675.361" fill="#F7FEFF" rx="1.014" ry="1.19" transform="rotate(3.292 216.45 675.361)" />
+                <!-- ...existing water particle elements... -->
+            </g>
+
+            <!-- Water Ripples -->
+            <g id="water-ripples">
+                <path fill="url(#water-base)" d="M80.888 767.906c-12.31 13.195-36.783 41.797-40.59 46.203l-.302.356c-1.52 1.844-2.995 4.351-3.695 8.125-.701 3.784-.84 7.404.785 14.403l.255 1.07c2.551 10.492 7.227 25.755 10 33.19l.539 1.43 4.865 12.839c5.524 14.537 12.343 32.346 14.304 36.987l.827 1.942c5.18 12.063 25.396 58.127 37.034 79.529 12.438 22.87 35.869 65.19 43.728 76.11l-.434.31-.433.31c-7.91-10.99-31.383-53.39-43.801-76.22-11.664-21.45-31.897-67.559-37.078-79.623l-.829-1.942c-2.625-6.214-13.885-35.838-19.183-49.862l-.539-1.432c-2.777-7.446-7.473-22.76-10.04-33.319l-.257-1.077c-1.648-7.098-1.53-10.872-.794-14.839.737-3.976 2.301-6.647 3.921-8.612l.305-.359c3.837-4.441 29.125-32.348 41.412-45.519" />
+            </g>
+        </g>
+    </g>
+</svg>
