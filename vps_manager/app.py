@@ -199,11 +199,29 @@ def check_server_status(ip, port, username, password=None, ssh_key=None, timeout
         return False, f"Error: {str(e)}"
 
 
-def execute_ssh_command(ip, port, username, password, command, timeout=60):
+def execute_ssh_command(ip, port, username, password=None, command="", timeout=60, ssh_key=None):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
+        
+        if ssh_key:
+            from io import StringIO
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except:
+                try:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.ECDSAKey.from_private_key(key_file)
+            ssh.connect(ip, port=port, username=username, pkey=pkey, timeout=timeout)
+        elif password:
+            ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
+        else:
+            return False, "", "No authentication method provided"
+        
         stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
         output = stdout.read().decode()
         error = stderr.read().decode()
@@ -214,29 +232,31 @@ def execute_ssh_command(ip, port, username, password, command, timeout=60):
 
 
 def get_server_resources(server):
-    password = decrypt_password_safe(server.ssh_password)
-    if not password:
+    password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+    
+    if not password and not ssh_key:
         return None
     
     try:
         # Get CPU usage
         success, cpu_output, _ = execute_ssh_command(
             server.ip_address, server.ssh_port, server.ssh_user, password,
-            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1", timeout=10
+            "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1", timeout=10, ssh_key=ssh_key
         )
         cpu_usage = float(cpu_output.strip()) if success and cpu_output.strip() else 0.0
         
         # Get RAM usage
         success, ram_output, _ = execute_ssh_command(
             server.ip_address, server.ssh_port, server.ssh_user, password,
-            "free | grep Mem | awk '{print ($3/$2) * 100.0}'", timeout=10
+            "free | grep Mem | awk '{print ($3/$2) * 100.0}'", timeout=10, ssh_key=ssh_key
         )
         ram_usage = float(ram_output.strip()) if success and ram_output.strip() else 0.0
         
         # Get Disk usage
         success, disk_output, _ = execute_ssh_command(
             server.ip_address, server.ssh_port, server.ssh_user, password,
-            "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1", timeout=10
+            "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1", timeout=10, ssh_key=ssh_key
         )
         disk_usage = float(disk_output.strip()) if success and disk_output.strip() else 0.0
         
