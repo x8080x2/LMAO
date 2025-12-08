@@ -169,11 +169,21 @@ def check_server_status(ip, port, username, password=None, ssh_key=None, timeout
         
         if ssh_key:
             from io import StringIO
-            key_file = StringIO(ssh_key)
-            pkey = paramiko.RSAKey.from_private_key(key_file)
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except:
+                try:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.ECDSAKey.from_private_key(key_file)
             ssh.connect(ip, port=port, username=username, pkey=pkey, timeout=timeout)
-        else:
+        elif password:
             ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
+        else:
+            return False, "No authentication method provided"
         
         ssh.close()
         return True, "Connection successful"
@@ -323,13 +333,14 @@ def add_vps():
 @app.route('/check-status/<int:server_id>')
 def check_status(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    password = decrypt_password_safe(server.ssh_password)
+    password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
     
-    if password is None:
+    if not password and not ssh_key:
         return jsonify({'active': False, 'message': 'Failed to decrypt credentials. Server may need to be re-added.'})
     
     was_active = server.is_active
-    is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password)
+    is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password, ssh_key)
     
     server.is_active = is_active
     server.last_checked = datetime.utcnow()
