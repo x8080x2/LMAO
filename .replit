@@ -41,4 +41,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "--chdir", "vps_manager", "app:app"]
+run = ["sh", "-c", "cd vps_manager && python migrate_db.py && gunicorn --bind 0.0.0.0:5000 --timeout 300 app:app"]
+build = ["sh", "-c", "pip install -r vps_manager/requirements.txt 2>/dev/null || echo 'No requirements file found'"]
