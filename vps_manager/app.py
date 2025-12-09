@@ -504,10 +504,22 @@ def deploy(server_id):
         thread.daemon = True
         thread.start()
         
+        # Return JSON if it's an AJAX request, otherwise redirect
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json:
+            return jsonify({'success': True, 'deployment_id': deployment.id})
+        
         flash(f'Deployment started for {domain}. Check the status on the server page.', 'info')
         return redirect(url_for('view_vps', server_id=server_id))
     
     return render_template('deploy.html', server=server)
+
+
+@app.route('/api/latest-deployment/<int:server_id>')
+def get_latest_deployment(server_id):
+    deployment = Deployment.query.filter_by(server_id=server_id).order_by(Deployment.deployed_at.desc()).first()
+    if deployment:
+        return jsonify({'deployment_id': deployment.id})
+    return jsonify({'deployment_id': None})
 
 
 @app.route('/api/deployment-status/<int:deployment_id>')

@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -50,6 +51,19 @@
                         <a href="/vps/{{ server.id }}" class="btn btn-outline-light">Cancel</a>
                     </div>
                 </form>
+
+                <!-- Progress Section (Hidden by default) -->
+                <div id="progressSection" class="mt-4" style="display: none;">
+                    <div class="card bg-dark">
+                        <div class="card-body">
+                            <h6 class="mb-3"><i class="bi bi-hourglass-split me-2"></i>Deployment Progress</h6>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                            </div>
+                            <p id="progressStep" class="mb-0 text-center">Starting deployment...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -58,10 +72,82 @@
 
 {% block scripts %}
 <script>
-document.getElementById('deployForm').addEventListener('submit', function() {
+let deploymentId = null;
+let progressInterval = null;
+
+document.getElementById('deployForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
     const btn = document.getElementById('deployBtn');
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Deploying... This may take a few minutes';
+    const form = e.target;
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting...';
     btn.disabled = true;
+    
+    // Submit form via fetch to get deployment ID
+    fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form)
+    })
+    .then(response => response.text())
+    .then(html => {
+        // Parse the response to extract deployment ID
+        // Since we're redirecting, we need to change the approach
+        // Hide form, show progress
+        form.style.display = 'none';
+        document.getElementById('progressSection').style.display = 'block';
+        
+        // Get the latest deployment for this server
+        fetch('/api/latest-deployment/{{ server.id }}')
+        .then(r => r.json())
+        .then(data => {
+            if (data.deployment_id) {
+                deploymentId = data.deployment_id;
+                startProgressPolling();
+            }
+        });
+    })
+    .catch(error => {
+        alert('Error starting deployment: ' + error);
+        btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i>Start Deployment';
+        btn.disabled = false;
+    });
 });
+
+function startProgressPolling() {
+    progressInterval = setInterval(checkDeploymentProgress, 2000);
+    checkDeploymentProgress(); // Check immediately
+}
+
+function checkDeploymentProgress() {
+    if (!deploymentId) return;
+    
+    fetch('/api/deployment-status/' + deploymentId)
+    .then(response => response.json())
+    .then(data => {
+        const progressBar = document.getElementById('progressBar');
+        const progressStep = document.getElementById('progressStep');
+        
+        progressBar.style.width = data.progress + '%';
+        progressBar.textContent = data.progress + '%';
+        progressStep.textContent = data.step;
+        
+        if (data.status === 'completed') {
+            clearInterval(progressInterval);
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-success');
+            setTimeout(() => {
+                window.location.href = '/vps/{{ server.id }}';
+            }, 2000);
+        } else if (data.status === 'failed') {
+            clearInterval(progressInterval);
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error checking progress:', error);
+    });
+}
 </script>
 {% endblock %}
