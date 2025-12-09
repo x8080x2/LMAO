@@ -455,6 +455,15 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
             db.session.commit()
             
         except Exception as e:
+            try:
+                db.session.rollback()
+                deployment = Deployment.query.get(deployment_id)
+                if deployment:
+                    deployment.status = 'failed'
+                    deployment.error_message = str(e)
+                    db.session.commit()
+            except:
+                pass
             with deployment_lock:
                 deployment_status[deployment_id] = {'status': 'failed', 'step': f'Error: {str(e)}', 'progress': 0}
 
@@ -735,7 +744,16 @@ def run_ssl_activation_background(app_context, server_id, deployment_id, passwor
                 ssl_status[deployment_id] = {'status': 'completed', 'step': 'SSL activated successfully!', 'progress': 100}
             
         except Exception as e:
-            log_action('SSL Failed', f"SSL activation failed: {str(e)}", server_id)
+            try:
+                db.session.rollback()
+                deployment = Deployment.query.get(deployment_id)
+                if deployment:
+                    deployment.status = 'ssl_failed'
+                    deployment.error_message = f"SSL activation failed: {str(e)}"
+                    db.session.commit()
+                log_action('SSL Failed', f"SSL activation failed: {str(e)}", server_id)
+            except:
+                pass
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'failed', 'step': f'Error: {str(e)}', 'progress': 0}
 
