@@ -1,7 +1,7 @@
-modules = ["python-3.11"]
+modules = ["php-8.2", "web", "python-3.11", "nodejs-20"]
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "unzip"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip"]
 
 [agent]
 expertMode = true
@@ -21,15 +21,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "VPS Manager"
+args = "Start application"
 
 [[workflows.workflow]]
-name = "VPS Manager"
+name = "Start application"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd vps_manager && python app.py"
+args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload app:app"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -38,3 +38,11 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 33397
+externalPort = 3000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "--chdir", "vps_manager", "app:app"]
