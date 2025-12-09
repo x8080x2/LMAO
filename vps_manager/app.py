@@ -548,31 +548,51 @@ def update_deployment_progress(deployment_id, step, progress):
 
 def deploy_project_with_progress(server, password, domain, is_wildcard, deployment_id):
     try:
+        print(f"\n{'='*60}")
+        print(f"DEPLOYMENT STARTED - ID: {deployment_id}")
+        print(f"Server: {server.name} ({server.ip_address})")
+        print(f"Domain: {domain}")
+        print(f"Wildcard: {is_wildcard}")
+        print(f"{'='*60}\n")
+        
         update_deployment_progress(deployment_id, 'Connecting to server...', 5)
+        print(f"[STEP 1] Connecting to {server.ip_address}:{server.ssh_port} as {server.ssh_user}")
         
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+        print(f"[SUCCESS] Connected to server")
         
         update_deployment_progress(deployment_id, 'Updating system packages...', 10)
+        print(f"[STEP 2] Updating system packages...")
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get update -y", timeout=120)
-        stdout.channel.recv_exit_status()
+        exit_status = stdout.channel.recv_exit_status()
+        print(f"[EXIT CODE] apt-get update: {exit_status}")
         
         update_deployment_progress(deployment_id, 'Installing Apache and PHP...', 25)
+        print(f"[STEP 3] Installing Apache and PHP...")
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php", timeout=180)
-        stdout.channel.recv_exit_status()
+        exit_status = stdout.channel.recv_exit_status()
+        print(f"[EXIT CODE] apt-get install: {exit_status}")
         
         update_deployment_progress(deployment_id, 'Configuring Apache modules...', 40)
+        print(f"[STEP 4] Configuring Apache modules...")
         for cmd in ["sudo a2enmod rewrite", "sudo a2enmod ssl"]:
+            print(f"  Running: {cmd}")
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
-            stdout.channel.recv_exit_status()
+            exit_status = stdout.channel.recv_exit_status()
+            print(f"  Exit code: {exit_status}")
         
         update_deployment_progress(deployment_id, 'Creating web directory...', 50)
+        print(f"[STEP 5] Creating web directory...")
         for cmd in [f"sudo mkdir -p /var/www/{domain}", f"sudo chown -R www-data:www-data /var/www/{domain}", f"sudo chmod -R 755 /var/www/{domain}"]:
+            print(f"  Running: {cmd}")
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
-            stdout.channel.recv_exit_status()
+            exit_status = stdout.channel.recv_exit_status()
+            print(f"  Exit code: {exit_status}")
         
         update_deployment_progress(deployment_id, 'Configuring virtual host...', 60)
+        print(f"[STEP 6] Configuring virtual host...")
         vhost_config = f"""<VirtualHost *:80>
     ServerName {domain}
     {"ServerAlias *." + domain if is_wildcard else ""}
@@ -593,33 +613,56 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         
         with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
             f.write(vhost_config)
+        print(f"  Created vhost config: /tmp/{domain}.conf")
         
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
+        print(f"  Apache configured and reloaded")
         
         update_deployment_progress(deployment_id, 'Uploading project files...', 70)
         local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
+        print(f"\n[STEP 7] Uploading project files...")
+        print(f"  Local path: {local_project_path}")
+        print(f"  Remote path: /var/www/{domain}")
+        
         # Verify local project path exists
         if not os.path.exists(local_project_path):
-            raise Exception(f"Local project path does not exist: {local_project_path}")
+            error_msg = f"Local project path does not exist: {local_project_path}"
+            print(f"[ERROR] {error_msg}")
+            raise Exception(error_msg)
         
+        print(f"  Local path exists: ✓")
+        print(f"  Starting file upload...")
         upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        print(f"[SUCCESS] Files uploaded")
         
         update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
+        print(f"\n[STEP 8] Setting file permissions...")
         ssh.exec_command(f"sudo mkdir -p /var/www/{domain}/page/result")
         ssh.exec_command(f"sudo chown -R www-data:www-data /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 755 /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
+        print(f"  Permissions set")
         
         sftp.close()
         ssh.close()
+        
+        print(f"\n{'='*60}")
+        print(f"DEPLOYMENT COMPLETED SUCCESSFULLY")
+        print(f"{'='*60}\n")
         
         log_action('Deployment Complete', f"Successfully deployed to {domain}", server.id)
         return True, "Deployment successful"
         
     except Exception as e:
+        print(f"\n{'!'*60}")
+        print(f"DEPLOYMENT FAILED")
+        print(f"Error: {str(e)}")
+        print(f"{'!'*60}\n")
+        import traceback
+        traceback.print_exc()
         log_action('Deployment Failed', f"Failed to deploy to {domain}: {str(e)}", server.id)
         return False, str(e)
 
@@ -689,25 +732,34 @@ def deploy_project(server, password, domain, is_wildcard):
         return False, str(e)
 
 
-def upload_directory(sftp, local_path, remote_path, ssh):
+def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
     import os
     
+    indent = "  " * depth
     exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
     exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
     
+    print(f"{indent}📁 Scanning: {local_path}")
+    
     # Check if local path exists
     if not os.path.exists(local_path):
-        print(f"Warning: Path does not exist: {local_path}")
+        print(f"{indent}⚠️  Path does not exist: {local_path}")
         return
     
     try:
         items = os.listdir(local_path)
+        print(f"{indent}   Found {len(items)} items")
     except (PermissionError, OSError) as e:
-        print(f"Warning: Cannot access directory {local_path}: {e}")
+        print(f"{indent}⚠️  Cannot access directory {local_path}: {e}")
         return
+    
+    uploaded_count = 0
+    skipped_count = 0
     
     for item in items:
         if item in exclude_dirs or item in exclude_files or item.startswith('.'):
+            print(f"{indent}   ⊘ Excluded: {item}")
+            skipped_count += 1
             continue
             
         local_item = os.path.join(local_path, item)
@@ -715,25 +767,39 @@ def upload_directory(sftp, local_path, remote_path, ssh):
         
         # Check if local item exists and is accessible
         if not os.path.exists(local_item):
-            print(f"Warning: Skipping non-existent item: {local_item}")
+            print(f"{indent}⚠️  Skipping non-existent: {local_item}")
+            skipped_count += 1
             continue
         
         try:
             if os.path.isfile(local_item):
+                file_size = os.path.getsize(local_item)
+                print(f"{indent}   📄 Uploading: {item} ({file_size} bytes)")
                 try:
                     sftp.put(local_item, remote_item)
-                except IOError:
+                    print(f"{indent}      ✓ Uploaded")
+                    uploaded_count += 1
+                except IOError as e:
+                    print(f"{indent}      Creating parent directory...")
                     ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item)}")
                     sftp.put(local_item, remote_item)
+                    print(f"{indent}      ✓ Uploaded (retry)")
+                    uploaded_count += 1
             elif os.path.isdir(local_item):
+                print(f"{indent}   📂 Directory: {item}")
                 try:
                     sftp.stat(remote_item)
+                    print(f"{indent}      Directory exists on remote")
                 except IOError:
+                    print(f"{indent}      Creating remote directory...")
                     ssh.exec_command(f"sudo mkdir -p {remote_item}")
-                upload_directory(sftp, local_item, remote_item, ssh)
+                upload_directory(sftp, local_item, remote_item, ssh, depth + 1)
         except (PermissionError, OSError, IOError) as e:
-            print(f"Warning: Failed to upload {local_item}: {e}")
+            print(f"{indent}❌ Failed to upload {local_item}: {e}")
+            skipped_count += 1
             continue
+    
+    print(f"{indent}✓ Completed: {uploaded_count} uploaded, {skipped_count} skipped")
 
 
 def run_ssl_activation_background(app_context, server_id, deployment_id, password):
