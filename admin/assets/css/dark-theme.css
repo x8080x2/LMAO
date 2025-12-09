@@ -7,7 +7,7 @@
 /* Global body and root styles */
 body {
     background-color: #1a1a1a !important;
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
     font-family: inherit;
 }
 
@@ -419,7 +419,7 @@ footer::before {
 
 .card-body {
     background-color: inherit !important;
-    color: inherit !important;
+    color: #ffffff !important;
     padding: 1.5rem !important;
 }
 
@@ -497,7 +497,7 @@ footer::before {
 .form-control {
     background-color: #404040 !important;
     border: 1px solid #5a5a5a !important;
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
 }
 
 .form-control:focus {
@@ -534,7 +534,7 @@ footer::before {
 
 /* Tables */
 .table {
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
 }
 
 .table-dark {
@@ -563,7 +563,7 @@ footer::before {
 
 /* DataTables specific */
 .dataTables_wrapper {
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
 }
 
 .dataTables_length select,
@@ -610,12 +610,13 @@ footer::before {
 
 .modal-body {
     background-color: #2d2d2d !important;
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
 }
 
 .modal-footer {
     background-color: #373737 !important;
     border-top: 1px solid #404040 !important;
+    color: #ffffff !important;
 }
 
 .btn-close {
@@ -628,7 +629,7 @@ footer::before {
 div[class*="alert"],
 div[class^="alert"] {
     background-color: rgba(45, 45, 45, 0.9) !important;
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
     border: 1px solid #404040 !important;
     border-radius: 8px !important;
     backdrop-filter: blur(10px) !important;
@@ -875,7 +876,7 @@ div[class^="alert"] {
 .list-group-item {
     background-color: #2d2d2d !important;
     border: 1px solid #404040 !important;
-    color: #e0e0e0 !important;
+    color: #ffffff !important;
 }
 
 .list-group-item:hover {
