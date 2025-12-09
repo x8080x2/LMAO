@@ -1,4 +1,5 @@
 import os
+import threading
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -7,6 +8,10 @@ import socket
 from cryptography.fernet import Fernet
 import base64
 import hashlib
+
+deployment_status = {}
+ssl_status = {}
+deployment_lock = threading.Lock()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'vps-manager-secret-key-2024')
@@ -399,6 +404,61 @@ def view_vps(server_id):
     return render_template('view_vps.html', server=server, deployments=deployments)
 
 
+def run_deployment_background(app_context, deployment_id, server_data, password, domain, is_wildcard):
+    with app_context:
+        try:
+            with deployment_lock:
+                deployment_status[deployment_id] = {'status': 'running', 'step': 'Starting deployment...', 'progress': 0}
+            
+            deployment = Deployment.query.get(deployment_id)
+            server = VPSServer.query.get(server_data['id'])
+            
+            success, result = deploy_project_with_progress(server, password, domain, is_wildcard, deployment_id)
+            
+            if success:
+                deployment.status = 'deployed'
+                deployment.admin_url = f"https://{domain}/admin"
+                
+                history = DeploymentHistory(
+                    deployment_id=deployment.id,
+                    action='Deployment',
+                    status='success',
+                    details=f'Successfully deployed to {domain}'
+                )
+                db.session.add(history)
+                
+                settings = NotificationSettings.query.first()
+                if settings and settings.notify_deployment:
+                    send_notification(f"✅ Deployment successful\nDomain: {domain}\nServer: {server.name}", 'success')
+                
+                with deployment_lock:
+                    deployment_status[deployment_id] = {'status': 'completed', 'step': 'Deployment successful!', 'progress': 100}
+            else:
+                deployment.status = 'failed'
+                deployment.error_message = result
+                
+                history = DeploymentHistory(
+                    deployment_id=deployment.id,
+                    action='Deployment',
+                    status='failed',
+                    details=f'Deployment failed: {result}'
+                )
+                db.session.add(history)
+                
+                settings = NotificationSettings.query.first()
+                if settings and settings.notify_deployment:
+                    send_notification(f"❌ Deployment failed\nDomain: {domain}\nServer: {server.name}\nError: {result}", 'error')
+                
+                with deployment_lock:
+                    deployment_status[deployment_id] = {'status': 'failed', 'step': f'Failed: {result}', 'progress': 0}
+            
+            db.session.commit()
+            
+        except Exception as e:
+            with deployment_lock:
+                deployment_status[deployment_id] = {'status': 'failed', 'step': f'Error: {str(e)}', 'progress': 0}
+
+
 @app.route('/vps/<int:server_id>/deploy', methods=['GET', 'POST'])
 def deploy(server_id):
     server = VPSServer.query.get_or_404(server_id)
@@ -427,46 +487,115 @@ def deploy(server_id):
         
         log_action('Deployment Started', f"Deploying to {domain} on {server.name}", server.id)
         
-        success, result = deploy_project(server, password, domain, is_wildcard)
+        server_data = {'id': server.id}
+        thread = threading.Thread(
+            target=run_deployment_background,
+            args=(app.app_context(), deployment.id, server_data, password, domain, is_wildcard)
+        )
+        thread.daemon = True
+        thread.start()
         
-        if success:
-            deployment.status = 'deployed'
-            deployment.admin_url = f"https://{domain}/admin"
-            flash(f'Project deployed successfully to {domain}!', 'success')
-            
-            history = DeploymentHistory(
-                deployment_id=deployment.id,
-                action='Deployment',
-                status='success',
-                details=f'Successfully deployed to {domain}'
-            )
-            db.session.add(history)
-            
-            settings = NotificationSettings.query.first()
-            if settings and settings.notify_deployment:
-                send_notification(f"✅ Deployment successful\nDomain: {domain}\nServer: {server.name}", 'success')
-        else:
-            deployment.status = 'failed'
-            deployment.error_message = result
-            flash(f'Deployment failed: {result}', 'error')
-            
-            history = DeploymentHistory(
-                deployment_id=deployment.id,
-                action='Deployment',
-                status='failed',
-                details=f'Deployment failed: {result}'
-            )
-            db.session.add(history)
-            
-            settings = NotificationSettings.query.first()
-            if settings and settings.notify_deployment:
-                send_notification(f"❌ Deployment failed\nDomain: {domain}\nServer: {server.name}\nError: {result}", 'error')
-        
-        db.session.commit()
-        
+        flash(f'Deployment started for {domain}. Check the status on the server page.', 'info')
         return redirect(url_for('view_vps', server_id=server_id))
     
     return render_template('deploy.html', server=server)
+
+
+@app.route('/api/deployment-status/<int:deployment_id>')
+def get_deployment_status(deployment_id):
+    with deployment_lock:
+        status = deployment_status.get(deployment_id, None)
+    
+    if status:
+        return jsonify(status)
+    
+    deployment = Deployment.query.get(deployment_id)
+    if deployment:
+        return jsonify({
+            'status': deployment.status,
+            'step': 'Deployment ' + deployment.status,
+            'progress': 100 if deployment.status == 'deployed' else 0
+        })
+    
+    return jsonify({'status': 'unknown', 'step': 'Unknown deployment', 'progress': 0})
+
+
+def update_deployment_progress(deployment_id, step, progress):
+    with deployment_lock:
+        deployment_status[deployment_id] = {'status': 'running', 'step': step, 'progress': progress}
+
+
+def deploy_project_with_progress(server, password, domain, is_wildcard, deployment_id):
+    try:
+        update_deployment_progress(deployment_id, 'Connecting to server...', 5)
+        
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+        
+        update_deployment_progress(deployment_id, 'Updating system packages...', 10)
+        stdin, stdout, stderr = ssh.exec_command("sudo apt-get update -y", timeout=120)
+        stdout.channel.recv_exit_status()
+        
+        update_deployment_progress(deployment_id, 'Installing Apache and PHP...', 25)
+        stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php", timeout=180)
+        stdout.channel.recv_exit_status()
+        
+        update_deployment_progress(deployment_id, 'Configuring Apache modules...', 40)
+        for cmd in ["sudo a2enmod rewrite", "sudo a2enmod ssl"]:
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
+            stdout.channel.recv_exit_status()
+        
+        update_deployment_progress(deployment_id, 'Creating web directory...', 50)
+        for cmd in [f"sudo mkdir -p /var/www/{domain}", f"sudo chown -R www-data:www-data /var/www/{domain}", f"sudo chmod -R 755 /var/www/{domain}"]:
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
+            stdout.channel.recv_exit_status()
+        
+        update_deployment_progress(deployment_id, 'Configuring virtual host...', 60)
+        vhost_config = f"""<VirtualHost *:80>
+    ServerName {domain}
+    {"ServerAlias *." + domain if is_wildcard else ""}
+    DocumentRoot /var/www/{domain}
+    
+    <Directory /var/www/{domain}>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog ${{APACHE_LOG_DIR}}/{domain}_error.log
+    CustomLog ${{APACHE_LOG_DIR}}/{domain}_access.log combined
+</VirtualHost>
+"""
+        
+        sftp = ssh.open_sftp()
+        
+        with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
+            f.write(vhost_config)
+        
+        ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
+        ssh.exec_command(f"sudo a2ensite {domain}.conf")
+        ssh.exec_command("sudo systemctl reload apache2")
+        
+        update_deployment_progress(deployment_id, 'Uploading project files...', 70)
+        local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        
+        update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
+        ssh.exec_command(f"sudo mkdir -p /var/www/{domain}/page/result")
+        ssh.exec_command(f"sudo chown -R www-data:www-data /var/www/{domain}")
+        ssh.exec_command(f"sudo chmod -R 755 /var/www/{domain}")
+        ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
+        
+        sftp.close()
+        ssh.close()
+        
+        log_action('Deployment Complete', f"Successfully deployed to {domain}", server.id)
+        return True, "Deployment successful"
+        
+    except Exception as e:
+        log_action('Deployment Failed', f"Failed to deploy to {domain}: {str(e)}", server.id)
+        return False, str(e)
 
 
 def deploy_project(server, password, domain, is_wildcard):
@@ -514,7 +643,6 @@ def deploy_project(server, password, domain, is_wildcard):
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
         
-        import os
         local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
         upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
@@ -562,6 +690,56 @@ def upload_directory(sftp, local_path, remote_path, ssh):
             upload_directory(sftp, local_item, remote_item, ssh)
 
 
+def run_ssl_activation_background(app_context, server_id, deployment_id, password):
+    with app_context:
+        try:
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'running', 'step': 'Starting SSL activation...', 'progress': 0}
+            
+            server = VPSServer.query.get(server_id)
+            deployment = Deployment.query.get(deployment_id)
+            
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'running', 'step': 'Connecting to server...', 'progress': 10}
+            
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+            
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'running', 'step': 'Installing Certbot...', 'progress': 30}
+            
+            stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
+            stdout.channel.recv_exit_status()
+            
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'running', 'step': 'Generating SSL certificate...', 'progress': 60}
+            
+            if deployment.is_wildcard:
+                cmd = f"sudo certbot --apache -d {deployment.domain} -d '*.{deployment.domain}' --non-interactive --agree-tos --email admin@{deployment.domain} --redirect"
+            else:
+                cmd = f"sudo certbot --apache -d {deployment.domain} --non-interactive --agree-tos --email admin@{deployment.domain} --redirect"
+            
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
+            stdout.channel.recv_exit_status()
+            
+            ssh.close()
+            
+            deployment.ssl_enabled = True
+            deployment.admin_url = f"https://{deployment.domain}/admin"
+            db.session.commit()
+            
+            log_action('SSL Activated', f"SSL enabled for {deployment.domain}", server.id)
+            
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'completed', 'step': 'SSL activated successfully!', 'progress': 100}
+            
+        except Exception as e:
+            log_action('SSL Failed', f"SSL activation failed: {str(e)}", server_id)
+            with deployment_lock:
+                ssl_status[deployment_id] = {'status': 'failed', 'step': f'Error: {str(e)}', 'progress': 0}
+
+
 @app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl', methods=['POST'])
 def activate_ssl(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
@@ -574,37 +752,33 @@ def activate_ssl(server_id, deployment_id):
     if password is None:
         return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
     
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-        
-        commands = [
-            "sudo apt-get install -y certbot python3-certbot-apache",
-        ]
-        
-        if deployment.is_wildcard:
-            commands.append(f"sudo certbot --apache -d {deployment.domain} -d '*.{deployment.domain}' --non-interactive --agree-tos --email admin@{deployment.domain} --redirect")
-        else:
-            commands.append(f"sudo certbot --apache -d {deployment.domain} --non-interactive --agree-tos --email admin@{deployment.domain} --redirect")
-        
-        for cmd in commands:
-            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
-            stdout.channel.recv_exit_status()
-        
-        ssh.close()
-        
-        deployment.ssl_enabled = True
-        deployment.admin_url = f"https://{deployment.domain}/admin"
-        db.session.commit()
-        
-        log_action('SSL Activated', f"SSL enabled for {deployment.domain}", server.id)
-        
-        return jsonify({'success': True, 'message': 'SSL activated successfully', 'admin_url': deployment.admin_url})
-        
-    except Exception as e:
-        log_action('SSL Failed', f"SSL activation failed for {deployment.domain}: {str(e)}", server.id)
-        return jsonify({'success': False, 'message': str(e)})
+    thread = threading.Thread(
+        target=run_ssl_activation_background,
+        args=(app.app_context(), server_id, deployment_id, password)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'success': True, 'message': 'SSL activation started. This may take a few minutes.'})
+
+
+@app.route('/api/ssl-status/<int:deployment_id>')
+def get_ssl_status(deployment_id):
+    with deployment_lock:
+        status = ssl_status.get(deployment_id, None)
+    
+    if status:
+        return jsonify(status)
+    
+    deployment = Deployment.query.get(deployment_id)
+    if deployment:
+        return jsonify({
+            'status': 'completed' if deployment.ssl_enabled else 'unknown',
+            'step': 'SSL enabled' if deployment.ssl_enabled else 'SSL not configured',
+            'progress': 100 if deployment.ssl_enabled else 0
+        })
+    
+    return jsonify({'status': 'unknown', 'step': 'Unknown deployment', 'progress': 0})
 
 
 @app.route('/bulk-check-status', methods=['POST'])

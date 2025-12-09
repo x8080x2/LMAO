@@ -27,13 +27,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload app:app"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --timeout 300 app:app"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
@@ -41,4 +41,4 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "--chdir", "vps_manager", "app:app"]
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "300", "--chdir", "vps_manager", "app:app"]
