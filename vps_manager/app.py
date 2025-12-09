@@ -712,14 +712,33 @@ def deploy_project(server, password, domain, is_wildcard):
 
         with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
             f.write(vhost_config)
-
+        
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
 
-        local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-        upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        # Define allowed items to upload
+        allowed_items = ['admin', 'page', 'qr', 'b64.php', 'config.php', 'fake.php', 'index.php']
+
+        # Upload each allowed item
+        for item in allowed_items:
+            local_item_path = os.path.join(workspace_root, item)
+
+            if not os.path.exists(local_item_path):
+                continue
+
+            remote_item_path = f"/var/www/{domain}/{item}"
+
+            if os.path.isdir(local_item_path):
+                upload_directory(sftp, local_item_path, remote_item_path, ssh)
+            else:
+                try:
+                    sftp.put(local_item_path, remote_item_path)
+                except IOError:
+                    ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item_path)}")
+                    sftp.put(local_item_path, remote_item_path)
 
         ssh.exec_command(f"sudo mkdir -p /var/www/{domain}/page/result")
         ssh.exec_command(f"sudo chown -R www-data:www-data /var/www/{domain}")
@@ -817,7 +836,7 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
     import os
 
     indent = "  " * depth
-    exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
+    exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.cache', 'node_modules']
     exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
 
     print(f"{indent}📁 Scanning: {local_path}")
