@@ -712,7 +712,7 @@ def deploy_project(server, password, domain, is_wildcard):
 
         with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
             f.write(vhost_config)
-        
+
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
