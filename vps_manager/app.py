@@ -770,6 +770,83 @@ def run_ssl_activation_background(app_context, server_id, deployment_id, passwor
                 ssl_status[deployment_id] = {'status': 'failed', 'step': f'Error: {str(e)}', 'progress': 0}
 
 
+@app.route('/vps/<int:server_id>/format', methods=['POST'])
+def format_vps(server_id):
+    server = VPSServer.query.get_or_404(server_id)
+    
+    if not server.is_active:
+        return jsonify({'success': False, 'message': 'Server is not active'})
+    
+    password = decrypt_password_safe(server.ssh_password)
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+    
+    if not password and not ssh_key:
+        return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
+    
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        if ssh_key:
+            from io import StringIO
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except:
+                try:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.ECDSAKey.from_private_key(key_file)
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
+        else:
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+        
+        # Get all deployments for this server
+        deployments = Deployment.query.filter_by(server_id=server_id).all()
+        domains_cleaned = []
+        
+        for deployment in deployments:
+            domain = deployment.domain
+            
+            # Disable Apache site
+            ssh.exec_command(f"sudo a2dissite {domain}.conf", timeout=30)
+            
+            # Remove Apache config
+            ssh.exec_command(f"sudo rm -f /etc/apache2/sites-available/{domain}.conf", timeout=30)
+            
+            # Remove SSL certificates
+            ssh.exec_command(f"sudo certbot delete --cert-name {domain} --non-interactive", timeout=60)
+            
+            # Remove web files
+            ssh.exec_command(f"sudo rm -rf /var/www/{domain}", timeout=60)
+            
+            domains_cleaned.append(domain)
+        
+        # Reload Apache
+        ssh.exec_command("sudo systemctl reload apache2", timeout=30)
+        
+        ssh.close()
+        
+        # Delete deployment records from database
+        DeploymentHistory.query.filter(DeploymentHistory.deployment_id.in_([d.id for d in deployments])).delete(synchronize_session=False)
+        Deployment.query.filter_by(server_id=server_id).delete()
+        db.session.commit()
+        
+        log_action('VPS Formatted', f"Formatted VPS {server.name} - Removed {len(domains_cleaned)} deployments", server.id)
+        
+        message = f"Successfully formatted VPS.\nRemoved {len(domains_cleaned)} deployment(s)."
+        if domains_cleaned:
+            message += f"\n\nCleaned domains: {', '.join(domains_cleaned)}"
+        
+        return jsonify({'success': True, 'message': message})
+        
+    except Exception as e:
+        log_action('VPS Format Failed', f"Failed to format VPS {server.name}: {str(e)}", server.id)
+        return jsonify({'success': False, 'message': str(e)})
+
+
 @app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl', methods=['POST'])
 def activate_ssl(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
