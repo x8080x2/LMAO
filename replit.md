@@ -71,3 +71,11 @@ The VPS Manager runs on port 5000 and is configured via the workflow system.
   - Built deployment system with Apache configuration
   - Added SSL activation via Let's Encrypt
   - Created audit logging system
+
+- December 9, 2024: Wildcard SSL Implementation
+  - Added multi-step SSL setup page for wildcard certificates
+  - Implemented DNS TXT record verification workflow
+  - Added `ssl_step` and `ssl_txt_value` fields to track SSL setup progress
+  - Uses Certbot DNS-01 challenge for wildcard certs
+  - Falls back to single-domain SSL if wildcard setup fails
+  - Fixed Apache startup from `reload` to `restart` + `enable`
