@@ -622,24 +622,55 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         print(f"  Apache configured and reloaded")
 
         update_deployment_progress(deployment_id, 'Uploading project files...', 70)
-        local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         print(f"\n[STEP 7] Uploading project files...")
-        print(f"  Local path: {local_project_path}")
+        print(f"  Workspace root: {workspace_root}")
         print(f"  Remote path: /var/www/{domain}")
 
-        # Verify local project path exists
-        if not os.path.exists(local_project_path):
-            error_msg = f"Local project path does not exist: {local_project_path}"
-            print(f"[ERROR] {error_msg}")
-            raise Exception(error_msg)
-
-        print(f"  Local path exists: ✓")
-        print(f"  Starting parallel file upload...")
+        # Define allowed items to upload (only website files, not VPS manager)
+        allowed_items = ['admin', 'page', 'qr', 'b64.php', 'config.php', 'fake.php', 'index.php']
+        print(f"  Allowed items: {allowed_items}")
 
         sftp = ssh.open_sftp()
-        upload_directory_parallel(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        total_files = 0
+
+        # Upload each allowed item
+        for item in allowed_items:
+            local_item_path = os.path.join(workspace_root, item)
+
+            if not os.path.exists(local_item_path):
+                print(f"  Skipping {item} (not found)")
+                continue
+
+            remote_item_path = f"/var/www/{domain}/{item}"
+            print(f"  Uploading: {item}")
+
+            if os.path.isdir(local_item_path):
+                # Count files in directory for progress reporting
+                file_count = sum(len(files) for _, _, files in os.walk(local_item_path))
+                print(f"    Directory with {file_count} files")
+                total_files += file_count
+                
+                # Use parallel upload for directories
+                exclude_dirs = ['.git', '__pycache__', '.cache', 'node_modules']
+                exclude_files = ['.gitignore', '.DS_Store']
+                upload_directory_parallel(sftp, local_item_path, remote_item_path, ssh, 
+                                         exclude_dirs=exclude_dirs, exclude_files=exclude_files)
+            else:
+                # Upload single file
+                try:
+                    sftp.put(local_item_path, remote_item_path)
+                    total_files += 1
+                    print(f"    Uploaded file")
+                except IOError:
+                    ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item_path)}")
+                    sftp.put(local_item_path, remote_item_path)
+                    total_files += 1
+                    print(f"    Uploaded file (created parent dir)")
+
         sftp.close()
+        print(f"  Total files uploaded: {total_files}")
 
         print(f"[SUCCESS] Files uploaded")
 
@@ -651,7 +682,6 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
         print(f"  Permissions set")
 
-        sftp.close()
         ssh.close()
 
         print(f"\n{'='*60}")
