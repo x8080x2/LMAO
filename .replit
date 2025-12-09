@@ -32,14 +32,18 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --timeout 300 app:app"
+args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload app:app"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 37895
+externalPort = 3000
+
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", "cd vps_manager && python migrate_db.py && gunicorn --bind 0.0.0.0:5000 --timeout 300 app:app"]
+run = ["bash", "-c", "cd vps_manager && gunicorn --bind 0.0.0.0:5000 app:app"]
 build = ["sh", "-c", "pip install -r vps_manager/requirements.txt 2>/dev/null || echo 'No requirements file found'"]
