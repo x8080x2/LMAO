@@ -684,6 +684,11 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
         print(f"  Permissions set")
 
+        update_deployment_progress(deployment_id, 'Restarting Apache...', 95)
+        print(f"\n[STEP 9] Final Apache restart...")
+        ssh.exec_command("sudo systemctl restart apache2")
+        print(f"  Apache restarted")
+
         ssh.close()
 
         print(f"\n{'='*60}")
@@ -777,6 +782,8 @@ def deploy_project(server, password, domain, is_wildcard):
         ssh.exec_command(f"sudo chown -R www-data:www-data /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 755 /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
+
+        ssh.exec_command("sudo systemctl restart apache2")
 
         sftp.close()
         ssh.close()
