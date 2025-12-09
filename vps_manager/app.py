@@ -600,6 +600,11 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         
         update_deployment_progress(deployment_id, 'Uploading project files...', 70)
         local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Verify local project path exists
+        if not os.path.exists(local_project_path):
+            raise Exception(f"Local project path does not exist: {local_project_path}")
+        
         upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
         
         update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
@@ -690,25 +695,45 @@ def upload_directory(sftp, local_path, remote_path, ssh):
     exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
     exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
     
-    for item in os.listdir(local_path):
+    # Check if local path exists
+    if not os.path.exists(local_path):
+        print(f"Warning: Path does not exist: {local_path}")
+        return
+    
+    try:
+        items = os.listdir(local_path)
+    except (PermissionError, OSError) as e:
+        print(f"Warning: Cannot access directory {local_path}: {e}")
+        return
+    
+    for item in items:
         if item in exclude_dirs or item in exclude_files or item.startswith('.'):
             continue
             
         local_item = os.path.join(local_path, item)
         remote_item = f"{remote_path}/{item}"
         
-        if os.path.isfile(local_item):
-            try:
-                sftp.put(local_item, remote_item)
-            except IOError:
-                ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item)}")
-                sftp.put(local_item, remote_item)
-        elif os.path.isdir(local_item):
-            try:
-                sftp.stat(remote_item)
-            except IOError:
-                ssh.exec_command(f"sudo mkdir -p {remote_item}")
-            upload_directory(sftp, local_item, remote_item, ssh)
+        # Check if local item exists and is accessible
+        if not os.path.exists(local_item):
+            print(f"Warning: Skipping non-existent item: {local_item}")
+            continue
+        
+        try:
+            if os.path.isfile(local_item):
+                try:
+                    sftp.put(local_item, remote_item)
+                except IOError:
+                    ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item)}")
+                    sftp.put(local_item, remote_item)
+            elif os.path.isdir(local_item):
+                try:
+                    sftp.stat(remote_item)
+                except IOError:
+                    ssh.exec_command(f"sudo mkdir -p {remote_item}")
+                upload_directory(sftp, local_item, remote_item, ssh)
+        except (PermissionError, OSError, IOError) as e:
+            print(f"Warning: Failed to upload {local_item}: {e}")
+            continue
 
 
 def run_ssl_activation_background(app_context, server_id, deployment_id, password):
