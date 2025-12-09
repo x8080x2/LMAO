@@ -39,7 +39,7 @@
                         <div class="btn-group w-100" role="group">
                             <input type="radio" class="btn-check" name="auth_method" id="auth_password" value="password" checked onchange="toggleAuthMethod()">
                             <label class="btn btn-outline-light" for="auth_password">Password</label>
-                            
+
                             <input type="radio" class="btn-check" name="auth_method" id="auth_key" value="key" onchange="toggleAuthMethod()">
                             <label class="btn btn-outline-light" for="auth_key">SSH Key</label>
                         </div>
@@ -120,7 +120,7 @@ function toggleAuthMethod() {
     const keySection = document.getElementById('key_section');
     const passwordInput = document.getElementById('ssh_password');
     const keyInput = document.getElementById('ssh_key');
-    
+
     if (authMethod === 'password') {
         passwordSection.style.display = 'block';
         keySection.style.display = 'none';
