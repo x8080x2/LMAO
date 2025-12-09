@@ -523,7 +523,18 @@ footer::before {
 }
 
 .form-label {
-    color: #b0b0b0 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+/* Ensure all label elements are visible */
+label {
+    color: #ffffff !important;
+}
+
+/* Form group labels */
+.form-group label {
+    color: #ffffff !important;
 }
 
 .input-group-text {
