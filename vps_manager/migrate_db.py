@@ -55,3 +55,10 @@ try:
 except Exception as e:
     print(f"Migration failed: {str(e)}")
     exit(1)
+import os
+from app import app, db
+
+# Ensure the database is created
+with app.app_context():
+    db.create_all()
+    print("Database tables created successfully!")
