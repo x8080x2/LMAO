@@ -1,4 +1,4 @@
-modules = ["php-8.2", "web", "python-3.11", "nodejs-20"]
+modules = ["php-8.2", "web", "python-3.11", "nodejs-20", "postgresql-16"]
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip"]
@@ -38,6 +38,10 @@ waitForPort = 5000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 34253
+externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"

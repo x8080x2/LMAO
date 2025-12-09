@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2>
+            <i class="bi bi-shield-lock me-2"></i>SSL Setup - {{ deployment.domain }}
+            {% if deployment.is_wildcard %}
+            <span class="badge bg-info ms-2">Wildcard</span>
+            {% endif %}
+        </h2>
+        <p class="text-muted mb-0">Server: {{ server.name }} ({{ server.ip_address }})</p>
+    </div>
+    <a href="/vps/{{ server.id }}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-left me-1"></i>Back to Server
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-ol me-2"></i>SSL Installation Steps</h5>
+            </div>
+            <div class="card-body">
+                {% if deployment.is_wildcard %}
+                <div class="step-container">
+                    <div class="step {{ 'completed' if step >= 1 else 'active' if step == 0 else '' }}" id="step1">
+                        <div class="step-header">
+                            <span class="step-number">1</span>
+                            <span class="step-title">Add DNS TXT Record</span>
+                            <span class="step-status" id="step1-status">
+                                {% if step >= 1 %}
+                                <i class="bi bi-check-circle text-success"></i>
+                                {% else %}
+                                <i class="bi bi-clock text-warning"></i>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="step-content mt-3">
+                            <p>Add the following TXT record to your domain's DNS settings:</p>
+                            <div class="dns-record-box bg-dark p-3 rounded mb-3">
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><strong>Record Type:</strong></div>
+                                    <div class="col-md-9"><code class="text-info">TXT</code></div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-3"><strong>Host/Name:</strong></div>
+                                    <div class="col-md-9">
+                                        <code class="text-warning" id="txt-host">_acme-challenge</code>
+                                        <button class="btn btn-sm btn-outline-light ms-2" onclick="copyToClipboard('_acme-challenge')">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3"><strong>Value:</strong></div>
+                                    <div class="col-md-9">
+                                        <code class="text-success" id="txt-value">{{ txt_value if txt_value else 'Click "Generate Challenge" to get the value' }}</code>
+                                        {% if txt_value %}
+                                        <button class="btn btn-sm btn-outline-light ms-2" onclick="copyToClipboard('{{ txt_value }}')">
+                                            <i class="bi bi-clipboard"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% if not txt_value %}
+                            <button class="btn btn-primary" id="generateBtn" onclick="generateChallenge()">
+                                <i class="bi bi-key me-1"></i>Generate Challenge
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="step {{ 'completed' if step >= 2 else 'active' if step == 1 else '' }} mt-4" id="step2">
+                        <div class="step-header">
+                            <span class="step-number">2</span>
+                            <span class="step-title">Verify DNS Propagation</span>
+                            <span class="step-status" id="step2-status">
+                                {% if step >= 2 %}
+                                <i class="bi bi-check-circle text-success"></i>
+                                {% elif step == 1 %}
+                                <i class="bi bi-clock text-warning"></i>
+                                {% else %}
+                                <i class="bi bi-circle text-muted"></i>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="step-content mt-3">
+                            <p>After adding the TXT record, wait for DNS propagation (usually 1-5 minutes) then verify:</p>
+                            <button class="btn btn-warning" id="verifyBtn" onclick="verifyDNS()" {{ 'disabled' if step < 1 else '' }}>
+                                <i class="bi bi-search me-1"></i>Verify DNS Record
+                            </button>
+                            <div id="verifyResult" class="mt-3" style="display: none;"></div>
+                        </div>
+                    </div>
+
+                    <div class="step {{ 'completed' if step >= 3 else 'active' if step == 2 else '' }} mt-4" id="step3">
+                        <div class="step-header">
+                            <span class="step-number">3</span>
+                            <span class="step-title">Install SSL Certificate</span>
+                            <span class="step-status" id="step3-status">
+                                {% if step >= 3 %}
+                                <i class="bi bi-check-circle text-success"></i>
+                                {% elif step == 2 %}
+                                <i class="bi bi-clock text-warning"></i>
+                                {% else %}
+                                <i class="bi bi-circle text-muted"></i>
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="step-content mt-3">
+                            <p>Once DNS is verified, install the SSL certificate:</p>
+                            <button class="btn btn-success" id="installBtn" onclick="installSSL()" {{ 'disabled' if step < 2 else '' }}>
+                                <i class="bi bi-shield-check me-1"></i>Install SSL Certificate
+                            </button>
+                            <div id="installResult" class="mt-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    This is a single-domain SSL certificate. It will be installed automatically using HTTP verification.
+                </div>
+                <button class="btn btn-success btn-lg" id="installBtn" onclick="installSSLDirect()">
+                    <i class="bi bi-shield-check me-1"></i>Install SSL Certificate
+                </button>
+                <div id="installResult" class="mt-3" style="display: none;"></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Information</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Domain:</strong> {{ deployment.domain }}</p>
+                <p><strong>Type:</strong> {{ 'Wildcard (*.domain.com)' if deployment.is_wildcard else 'Single Domain' }}</p>
+                <p><strong>SSL Status:</strong> 
+                    {% if deployment.ssl_enabled %}
+                    <span class="text-success"><i class="bi bi-check-circle"></i> Enabled</span>
+                    {% else %}
+                    <span class="text-warning"><i class="bi bi-clock"></i> Not Installed</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        {% if deployment.is_wildcard %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Tips</h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li>DNS propagation can take 1-5 minutes</li>
+                    <li>Make sure you're adding the record to the correct domain</li>
+                    <li>The TXT record should be added at the root of your domain</li>
+                    <li>You can use <a href="https://dnschecker.org" target="_blank">dnschecker.org</a> to verify propagation</li>
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.step {
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    background: rgba(0,0,0,0.2);
+}
+.step.active {
+    border-color: #0dcaf0;
+    background: rgba(13, 202, 240, 0.1);
+}
+.step.completed {
+    border-color: #198754;
+    background: rgba(25, 135, 84, 0.1);
+}
+.step-header {
+    display: flex;
+    align-items: center;
+}
+.step-number {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0dcaf0;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    margin-right: 10px;
+}
+.step.completed .step-number {
+    background: #198754;
+    color: #fff;
+}
+.step-title {
+    flex: 1;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+.dns-record-box code {
+    font-size: 0.95rem;
+}
+</style>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Copied to clipboard!');
+    });
+}
+
+function generateChallenge() {
+    const btn = document.getElementById('generateBtn');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+    btn.disabled = true;
+    
+    fetch('/vps/{{ server.id }}/deployment/{{ deployment.id }}/ssl/generate-challenge', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Failed to generate challenge: ' + data.message);
+            btn.innerHTML = '<i class="bi bi-key me-1"></i>Generate Challenge';
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error generating challenge');
+        btn.innerHTML = '<i class="bi bi-key me-1"></i>Generate Challenge';
+        btn.disabled = false;
+    });
+}
+
+function verifyDNS() {
+    const btn = document.getElementById('verifyBtn');
+    const resultDiv = document.getElementById('verifyResult');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verifying...';
+    btn.disabled = true;
+    resultDiv.style.display = 'none';
+    
+    fetch('/vps/{{ server.id }}/deployment/{{ deployment.id }}/ssl/verify-dns', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        resultDiv.style.display = 'block';
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>' + data.message + '</div>';
+            location.reload();
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>' + data.message + '</div>';
+            btn.innerHTML = '<i class="bi bi-search me-1"></i>Verify DNS Record';
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error verifying DNS</div>';
+        btn.innerHTML = '<i class="bi bi-search me-1"></i>Verify DNS Record';
+        btn.disabled = false;
+    });
+}
+
+function installSSL() {
+    const btn = document.getElementById('installBtn');
+    const resultDiv = document.getElementById('installResult');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Installing SSL...';
+    btn.disabled = true;
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>Installing SSL certificate. This may take 1-2 minutes...</div>';
+    
+    fetch('/vps/{{ server.id }}/deployment/{{ deployment.id }}/ssl/install', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>' + data.message + '</div>';
+            setTimeout(function() {
+                window.location.href = '/vps/{{ server.id }}';
+            }, 2000);
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>' + data.message + '</div>';
+            btn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Install SSL Certificate';
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error installing SSL</div>';
+        btn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Install SSL Certificate';
+        btn.disabled = false;
+    });
+}
+
+function installSSLDirect() {
+    const btn = document.getElementById('installBtn');
+    const resultDiv = document.getElementById('installResult');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Installing SSL...';
+    btn.disabled = true;
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>Installing SSL certificate. This may take 1-2 minutes...</div>';
+    
+    fetch('/vps/{{ server.id }}/deployment/{{ deployment.id }}/ssl', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>SSL installed successfully!</div>';
+            setTimeout(function() {
+                window.location.href = '/vps/{{ server.id }}';
+            }, 2000);
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>' + data.message + '</div>';
+            btn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Install SSL Certificate';
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = '<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error installing SSL</div>';
+        btn.innerHTML = '<i class="bi bi-shield-check me-1"></i>Install SSL Certificate';
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

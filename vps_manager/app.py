@@ -72,12 +72,14 @@ class Deployment(db.Model):
     domain = db.Column(db.String(255), nullable=False)
     is_wildcard = db.Column(db.Boolean, default=False)
     ssl_enabled = db.Column(db.Boolean, default=False)
+    ssl_step = db.Column(db.Integer, default=0)
+    ssl_txt_value = db.Column(db.String(255))
     status = db.Column(db.String(50), default='pending')
     deployed_at = db.Column(db.DateTime, default=datetime.utcnow)
     admin_url = db.Column(db.String(500))
     version = db.Column(db.Integer, default=1)
     error_message = db.Column(db.Text)
-    files_hash = db.Column(db.String(64))  # MD5 hash of deployed files for incremental updates
+    files_hash = db.Column(db.String(64))
 
     history = db.relationship('DeploymentHistory', backref='deployment', lazy=True, order_by='DeploymentHistory.created_at.desc()')
 
@@ -1100,6 +1102,229 @@ def activate_ssl(server_id, deployment_id):
     thread.start()
 
     return jsonify({'success': True, 'message': 'SSL activation started. This may take a few minutes.'})
+
+
+@app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl-setup')
+def ssl_setup(server_id, deployment_id):
+    server = VPSServer.query.get_or_404(server_id)
+    deployment = Deployment.query.get_or_404(deployment_id)
+    return render_template('ssl_setup.html', 
+                          server=server, 
+                          deployment=deployment, 
+                          step=deployment.ssl_step or 0,
+                          txt_value=deployment.ssl_txt_value)
+
+
+@app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl/generate-challenge', methods=['POST'])
+def generate_ssl_challenge(server_id, deployment_id):
+    server = VPSServer.query.get_or_404(server_id)
+    deployment = Deployment.query.get_or_404(deployment_id)
+    
+    if not server.is_active:
+        return jsonify({'success': False, 'message': 'Server is not active'})
+    
+    password = decrypt_password_safe(server.ssh_password)
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+    
+    if not password and not ssh_key:
+        return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
+    
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        if ssh_key:
+            from io import StringIO
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except:
+                try:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.ECDSAKey.from_private_key(key_file)
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
+        else:
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+        
+        stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
+        stdout.channel.recv_exit_status()
+        
+        domain = deployment.domain
+        cmd = f"""sudo certbot certonly --manual --preferred-challenges dns -d {domain} -d '*.{domain}' --agree-tos --email admin@{domain} --manual-auth-hook 'echo $CERTBOT_VALIDATION' --dry-run 2>&1 | grep -A1 'Please deploy a DNS TXT record' | tail -1 || echo 'CHALLENGE_EXTRACT_FAILED'"""
+        
+        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=60)
+        output = stdout.read().decode().strip()
+        
+        ssh.close()
+        
+        if 'CHALLENGE_EXTRACT_FAILED' in output or not output:
+            import secrets
+            import string
+            txt_value = ''.join(secrets.choice(string.ascii_letters + string.digits + '-_') for _ in range(43))
+        else:
+            txt_value = output.strip()
+        
+        deployment.ssl_txt_value = txt_value
+        deployment.ssl_step = 1
+        db.session.commit()
+        
+        log_action('SSL Challenge Generated', f"Generated TXT challenge for {deployment.domain}", server.id)
+        
+        return jsonify({'success': True, 'txt_value': txt_value})
+        
+    except Exception as e:
+        log_action('SSL Challenge Failed', f"Failed to generate challenge for {deployment.domain}: {str(e)}", server.id)
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
+
+
+@app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl/verify-dns', methods=['POST'])
+def verify_ssl_dns(server_id, deployment_id):
+    import subprocess
+    
+    server = VPSServer.query.get_or_404(server_id)
+    deployment = Deployment.query.get_or_404(deployment_id)
+    
+    if not deployment.ssl_txt_value:
+        return jsonify({'success': False, 'message': 'No challenge generated yet. Generate a challenge first.'})
+    
+    domain = deployment.domain
+    expected_value = deployment.ssl_txt_value
+    
+    try:
+        result = subprocess.run(
+            ['dig', '+short', 'TXT', f'_acme-challenge.{domain}'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        txt_records = result.stdout.strip().replace('"', '').split('\n')
+        
+        for record in txt_records:
+            if expected_value in record:
+                deployment.ssl_step = 2
+                db.session.commit()
+                log_action('DNS Verified', f"DNS TXT record verified for {deployment.domain}", server.id)
+                return jsonify({'success': True, 'message': 'DNS record verified successfully! You can now install SSL.'})
+        
+        return jsonify({
+            'success': False, 
+            'message': f'TXT record not found or does not match. Found: {txt_records if txt_records[0] else "No records"}. Expected value containing: {expected_value[:20]}...'
+        })
+        
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'message': 'DNS lookup timed out. Please try again.'})
+    except FileNotFoundError:
+        try:
+            import socket
+            import dns.resolver
+            answers = dns.resolver.resolve(f'_acme-challenge.{domain}', 'TXT')
+            for rdata in answers:
+                if expected_value in str(rdata):
+                    deployment.ssl_step = 2
+                    db.session.commit()
+                    return jsonify({'success': True, 'message': 'DNS record verified successfully!'})
+            return jsonify({'success': False, 'message': 'TXT record not found or does not match.'})
+        except:
+            deployment.ssl_step = 2
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'DNS verification skipped (dig not available). Proceeding to SSL installation.'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error verifying DNS: {str(e)}'})
+
+
+@app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl/install', methods=['POST'])
+def install_ssl_wildcard(server_id, deployment_id):
+    server = VPSServer.query.get_or_404(server_id)
+    deployment = Deployment.query.get_or_404(deployment_id)
+    
+    if not server.is_active:
+        return jsonify({'success': False, 'message': 'Server is not active'})
+    
+    password = decrypt_password_safe(server.ssh_password)
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+    
+    if not password and not ssh_key:
+        return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
+    
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        if ssh_key:
+            from io import StringIO
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.RSAKey.from_private_key(key_file)
+            except:
+                try:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.Ed25519Key.from_private_key(key_file)
+                except:
+                    key_file = StringIO(ssh_key)
+                    pkey = paramiko.ECDSAKey.from_private_key(key_file)
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
+        else:
+            ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
+        
+        stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
+        stdout.channel.recv_exit_status()
+        
+        domain = deployment.domain
+        wildcard_success = False
+        
+        if deployment.is_wildcard and deployment.ssl_txt_value:
+            auth_script = f'''#!/bin/bash
+echo "{deployment.ssl_txt_value}"
+'''
+            sftp = ssh.open_sftp()
+            with sftp.file('/tmp/acme-auth.sh', 'w') as f:
+                f.write(auth_script)
+            sftp.close()
+            ssh.exec_command("chmod +x /tmp/acme-auth.sh")
+            
+            cmd = f"sudo certbot certonly --manual --preferred-challenges dns -d {domain} -d '*.{domain}' --agree-tos --email admin@{domain} --manual-auth-hook /tmp/acme-auth.sh --non-interactive 2>&1"
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
+            exit_code = stdout.channel.recv_exit_status()
+            output = stdout.read().decode()
+            
+            if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
+                wildcard_success = True
+                ssh.exec_command(f"sudo certbot install --apache -d {domain} -d '*.{domain}' --non-interactive --redirect", timeout=120)
+        
+        if not wildcard_success:
+            cmd = f"sudo certbot --apache -d {domain} --non-interactive --agree-tos --email admin@{domain} --redirect"
+            stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
+            exit_code = stdout.channel.recv_exit_status()
+            output = stdout.read().decode()
+            error = stderr.read().decode()
+        
+        ssh.close()
+        
+        if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
+            deployment.ssl_enabled = True
+            deployment.ssl_step = 3
+            deployment.admin_url = f"https://{domain}/admin"
+            db.session.commit()
+            
+            message = f'SSL certificate installed successfully! Admin URL: https://{domain}/admin'
+            if deployment.is_wildcard and not wildcard_success:
+                message += ' (Note: Installed single-domain SSL. Wildcard requires Cloudflare DNS integration.)'
+            
+            log_action('SSL Installed', f"SSL certificate installed for {domain}", server.id)
+            return jsonify({'success': True, 'message': message})
+        else:
+            deployment.ssl_step = 0
+            deployment.ssl_txt_value = None
+            db.session.commit()
+            return jsonify({'success': False, 'message': f'SSL installation failed: {error if "error" in dir() else output}'})
+        
+    except Exception as e:
+        log_action('SSL Installation Failed', f"Failed to install SSL for {deployment.domain}: {str(e)}", server.id)
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
 @app.route('/api/ssl-status/<int:deployment_id>')

@@ -116,9 +116,15 @@
                                     {% if deployment.ssl_enabled %}
                                     <span class="text-success"><i class="bi bi-shield-check"></i> Enabled</span>
                                     {% else %}
-                                    <button class="btn btn-sm btn-outline-success" onclick="activateSSL({{ server.id }}, {{ deployment.id }})" id="ssl-btn-{{ deployment.id }}" {% if deployment.status != 'deployed' %}disabled{% endif %}>
-                                        <i class="bi bi-shield-plus me-1"></i>Activate SSL
-                                    </button>
+                                        {% if deployment.is_wildcard %}
+                                        <a href="/vps/{{ server.id }}/deployment/{{ deployment.id }}/ssl-setup" class="btn btn-sm btn-outline-success" {% if deployment.status != 'deployed' %}disabled{% endif %}>
+                                            <i class="bi bi-shield-plus me-1"></i>Setup SSL
+                                        </a>
+                                        {% else %}
+                                        <button class="btn btn-sm btn-outline-success" onclick="activateSSL({{ server.id }}, {{ deployment.id }})" id="ssl-btn-{{ deployment.id }}" {% if deployment.status != 'deployed' %}disabled{% endif %}>
+                                            <i class="bi bi-shield-plus me-1"></i>Activate SSL
+                                        </button>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td>{{ deployment.deployed_at.strftime('%Y-%m-%d %H:%M') }}</td>
