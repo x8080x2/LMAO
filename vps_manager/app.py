@@ -44,7 +44,7 @@ def decrypt_password(encrypted_password):
 
 class VPSServer(db.Model):
     __tablename__ = 'vps_servers'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     ip_address = db.Column(db.String(45), nullable=False)
@@ -60,13 +60,13 @@ class VPSServer(db.Model):
     cpu_usage = db.Column(db.Float, default=0.0)
     ram_usage = db.Column(db.Float, default=0.0)
     disk_usage = db.Column(db.Float, default=0.0)
-    
+
     deployments = db.relationship('Deployment', backref='server', lazy=True)
 
 
 class Deployment(db.Model):
     __tablename__ = 'deployments'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     server_id = db.Column(db.Integer, db.ForeignKey('vps_servers.id'), nullable=False)
     domain = db.Column(db.String(255), nullable=False)
@@ -78,13 +78,13 @@ class Deployment(db.Model):
     version = db.Column(db.Integer, default=1)
     error_message = db.Column(db.Text)
     files_hash = db.Column(db.String(64))  # MD5 hash of deployed files for incremental updates
-    
+
     history = db.relationship('DeploymentHistory', backref='deployment', lazy=True, order_by='DeploymentHistory.created_at.desc()')
 
 
 class DeploymentHistory(db.Model):
     __tablename__ = 'deployment_history'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     deployment_id = db.Column(db.Integer, db.ForeignKey('deployments.id'), nullable=False)
     action = db.Column(db.String(100), nullable=False)
@@ -95,7 +95,7 @@ class DeploymentHistory(db.Model):
 
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     action = db.Column(db.String(100), nullable=False)
     details = db.Column(db.Text)
@@ -105,7 +105,7 @@ class AuditLog(db.Model):
 
 class NotificationSettings(db.Model):
     __tablename__ = 'notification_settings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     telegram_enabled = db.Column(db.Boolean, default=False)
     telegram_bot_token = db.Column(db.String(255))
@@ -130,7 +130,7 @@ def send_notification(message, notification_type='info'):
     settings = NotificationSettings.query.first()
     if not settings:
         return
-    
+
     if settings.telegram_enabled and settings.telegram_bot_token and settings.telegram_chat_id:
         try:
             import requests
@@ -143,21 +143,21 @@ def send_notification(message, notification_type='info'):
             requests.post(url, data=data, timeout=5)
         except Exception as e:
             print(f"Telegram notification failed: {e}")
-    
+
     if settings.email_enabled and settings.email_smtp_server:
         try:
             import smtplib
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
-            
+
             msg = MIMEMultipart()
             msg['From'] = settings.email_username
             msg['To'] = settings.email_recipient
             msg['Subject'] = f"VPS Manager Alert - {notification_type.upper()}"
             msg.attach(MIMEText(message, 'plain'))
-            
+
             password = decrypt_password_safe(settings.email_password) if settings.email_password else ''
-            
+
             server = smtplib.SMTP(settings.email_smtp_server, settings.email_smtp_port)
             server.starttls()
             if password:
@@ -172,7 +172,7 @@ def check_server_status(ip, port, username, password=None, ssh_key=None, timeout
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         if ssh_key:
             from io import StringIO
             try:
@@ -190,7 +190,7 @@ def check_server_status(ip, port, username, password=None, ssh_key=None, timeout
             ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
         else:
             return False, "No authentication method provided"
-        
+
         ssh.close()
         return True, "Connection successful"
     except paramiko.AuthenticationException:
@@ -209,7 +209,7 @@ def execute_ssh_command(ip, port, username, password=None, command="", timeout=6
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         if ssh_key:
             from io import StringIO
             try:
@@ -227,7 +227,7 @@ def execute_ssh_command(ip, port, username, password=None, command="", timeout=6
             ssh.connect(ip, port=port, username=username, password=password, timeout=timeout)
         else:
             return False, "", "No authentication method provided"
-        
+
         stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
         output = stdout.read().decode()
         error = stderr.read().decode()
@@ -240,10 +240,10 @@ def execute_ssh_command(ip, port, username, password=None, command="", timeout=6
 def get_server_resources(server):
     password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         return None
-    
+
     try:
         # Get CPU usage
         success, cpu_output, _ = execute_ssh_command(
@@ -251,21 +251,21 @@ def get_server_resources(server):
             "top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | cut -d'%' -f1", timeout=10, ssh_key=ssh_key
         )
         cpu_usage = float(cpu_output.strip()) if success and cpu_output.strip() else 0.0
-        
+
         # Get RAM usage
         success, ram_output, _ = execute_ssh_command(
             server.ip_address, server.ssh_port, server.ssh_user, password,
             "free | grep Mem | awk '{print ($3/$2) * 100.0}'", timeout=10, ssh_key=ssh_key
         )
         ram_usage = float(ram_output.strip()) if success and ram_output.strip() else 0.0
-        
+
         # Get Disk usage
         success, disk_output, _ = execute_ssh_command(
             server.ip_address, server.ssh_port, server.ssh_user, password,
             "df -h / | tail -1 | awk '{print $5}' | cut -d'%' -f1", timeout=10, ssh_key=ssh_key
         )
         disk_usage = float(disk_output.strip()) if success and disk_output.strip() else 0.0
-        
+
         return {
             'cpu': round(cpu_usage, 2),
             'ram': round(ram_usage, 2),
@@ -285,20 +285,20 @@ def index():
 @app.route('/dashboard')
 def dashboard():
     servers = VPSServer.query.all()
-    
+
     active_count = sum(1 for s in servers if s.is_active)
     inactive_count = len(servers) - active_count
     total_deployments = Deployment.query.count()
-    
+
     # Servers with high resource usage (>80%) or offline
     critical_servers = [
-        s for s in servers 
+        s for s in servers
         if not s.is_active or s.cpu_usage > 80 or s.ram_usage > 80 or s.disk_usage > 80
     ]
-    
+
     high_resource_count = len([s for s in servers if s.cpu_usage > 80 or s.ram_usage > 80 or s.disk_usage > 80])
-    
-    return render_template('dashboard.html', 
+
+    return render_template('dashboard.html',
                          active_count=active_count,
                          inactive_count=inactive_count,
                          total_deployments=total_deployments,
@@ -317,12 +317,12 @@ def add_vps():
         ssh_port = int(request.form.get('ssh_port', 22))
         group = request.form.get('group', 'default')
         tags = request.form.get('tags', '')
-        
+
         is_active, message = check_server_status(ip_address, ssh_port, ssh_user, ssh_password, ssh_key)
-        
+
         encrypted_pass = encrypt_password(ssh_password) if ssh_password else None
         encrypted_key = encrypt_password(ssh_key) if ssh_key else None
-        
+
         server = VPSServer(
             name=name,
             ip_address=ip_address,
@@ -335,12 +335,12 @@ def add_vps():
             group=group,
             tags=tags
         )
-        
+
         db.session.add(server)
         db.session.commit()
-        
+
         log_action('VPS Added', f"Added VPS: {name} ({ip_address}) - Status: {'Active' if is_active else 'Inactive'}", server.id)
-        
+
         if is_active:
             flash(f'VPS "{name}" added successfully and is ACTIVE!', 'success')
         else:
@@ -348,9 +348,9 @@ def add_vps():
             settings = NotificationSettings.query.first()
             if settings and settings.notify_offline:
                 send_notification(f"⚠️ VPS '{name}' ({ip_address}) is OFFLINE\n{message}", 'warning')
-        
+
         return redirect(url_for('index'))
-    
+
     groups = db.session.query(VPSServer.group).distinct().all()
     groups = [g[0] for g in groups if g[0]]
     return render_template('add_vps.html', groups=groups)
@@ -361,16 +361,16 @@ def check_status(server_id):
     server = VPSServer.query.get_or_404(server_id)
     password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         return jsonify({'active': False, 'message': 'Failed to decrypt credentials. Server may need to be re-added.'})
-    
+
     was_active = server.is_active
     is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password, ssh_key)
-    
+
     server.is_active = is_active
     server.last_checked = datetime.utcnow()
-    
+
     # Get resource usage if server is active
     if is_active:
         resources = get_server_resources(server)
@@ -378,19 +378,19 @@ def check_status(server_id):
             server.cpu_usage = resources['cpu']
             server.ram_usage = resources['ram']
             server.disk_usage = resources['disk']
-    
+
     db.session.commit()
-    
+
     log_action('Status Check', f"Checked {server.name}: {'Active' if is_active else 'Inactive'} - {message}", server.id)
-    
+
     # Send notification if server went offline
     if was_active and not is_active:
         settings = NotificationSettings.query.first()
         if settings and settings.notify_offline:
             send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
-    
+
     return jsonify({
-        'active': is_active, 
+        'active': is_active,
         'message': message,
         'cpu': server.cpu_usage,
         'ram': server.ram_usage,
@@ -410,16 +410,16 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
         try:
             with deployment_lock:
                 deployment_status[deployment_id] = {'status': 'running', 'step': 'Starting deployment...', 'progress': 0}
-            
+
             deployment = Deployment.query.get(deployment_id)
             server = VPSServer.query.get(server_data['id'])
-            
+
             success, result = deploy_project_with_progress(server, password, domain, is_wildcard, deployment_id)
-            
+
             if success:
                 deployment.status = 'deployed'
                 deployment.admin_url = f"https://{domain}/admin"
-                
+
                 history = DeploymentHistory(
                     deployment_id=deployment.id,
                     action='Deployment',
@@ -427,17 +427,17 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
                     details=f'Successfully deployed to {domain}'
                 )
                 db.session.add(history)
-                
+
                 settings = NotificationSettings.query.first()
                 if settings and settings.notify_deployment:
                     send_notification(f"✅ Deployment successful\nDomain: {domain}\nServer: {server.name}", 'success')
-                
+
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'completed', 'step': 'Deployment successful!', 'progress': 100}
             else:
                 deployment.status = 'failed'
                 deployment.error_message = result
-                
+
                 history = DeploymentHistory(
                     deployment_id=deployment.id,
                     action='Deployment',
@@ -445,16 +445,16 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
                     details=f'Deployment failed: {result}'
                 )
                 db.session.add(history)
-                
+
                 settings = NotificationSettings.query.first()
                 if settings and settings.notify_deployment:
                     send_notification(f"❌ Deployment failed\nDomain: {domain}\nServer: {server.name}\nError: {result}", 'error')
-                
+
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'failed', 'step': f'Failed: {result}', 'progress': 0}
-            
+
             db.session.commit()
-            
+
         except Exception as e:
             try:
                 db.session.rollback()
@@ -472,20 +472,20 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
 @app.route('/vps/<int:server_id>/deploy', methods=['GET', 'POST'])
 def deploy(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    
+
     if not server.is_active:
         flash('Cannot deploy to inactive server. Please check the connection first.', 'error')
         return redirect(url_for('view_vps', server_id=server_id))
-    
+
     if request.method == 'POST':
         domain = request.form.get('domain')
         is_wildcard = request.form.get('is_wildcard') == 'on'
-        
+
         password = decrypt_password_safe(server.ssh_password)
         if password is None:
             flash('Failed to decrypt server credentials. Please re-add the server.', 'error')
             return redirect(url_for('view_vps', server_id=server_id))
-        
+
         deployment = Deployment(
             server_id=server_id,
             domain=domain,
@@ -494,9 +494,9 @@ def deploy(server_id):
         )
         db.session.add(deployment)
         db.session.commit()
-        
+
         log_action('Deployment Started', f"Deploying to {domain} on {server.name}", server.id)
-        
+
         server_data = {'id': server.id}
         thread = threading.Thread(
             target=run_deployment_background,
@@ -504,14 +504,14 @@ def deploy(server_id):
         )
         thread.daemon = True
         thread.start()
-        
+
         # Return JSON if it's an AJAX request, otherwise redirect
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.accept_mimetypes.accept_json:
             return jsonify({'success': True, 'deployment_id': deployment.id})
-        
+
         flash(f'Deployment started for {domain}. Check the status on the server page.', 'info')
         return redirect(url_for('view_vps', server_id=server_id))
-    
+
     return render_template('deploy.html', server=server)
 
 
@@ -527,10 +527,10 @@ def get_latest_deployment(server_id):
 def get_deployment_status(deployment_id):
     with deployment_lock:
         status = deployment_status.get(deployment_id, None)
-    
+
     if status:
         return jsonify(status)
-    
+
     deployment = Deployment.query.get(deployment_id)
     if deployment:
         return jsonify({
@@ -538,7 +538,7 @@ def get_deployment_status(deployment_id):
             'step': 'Deployment ' + deployment.status,
             'progress': 100 if deployment.status == 'deployed' else 0
         })
-    
+
     return jsonify({'status': 'unknown', 'step': 'Unknown deployment', 'progress': 0})
 
 
@@ -555,27 +555,27 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         print(f"Domain: {domain}")
         print(f"Wildcard: {is_wildcard}")
         print(f"{'='*60}\n")
-        
+
         update_deployment_progress(deployment_id, 'Connecting to server...', 5)
         print(f"[STEP 1] Connecting to {server.ip_address}:{server.ssh_port} as {server.ssh_user}")
-        
+
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
         print(f"[SUCCESS] Connected to server")
-        
+
         update_deployment_progress(deployment_id, 'Updating system packages...', 10)
         print(f"[STEP 2] Updating system packages...")
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get update -y", timeout=120)
         exit_status = stdout.channel.recv_exit_status()
         print(f"[EXIT CODE] apt-get update: {exit_status}")
-        
+
         update_deployment_progress(deployment_id, 'Installing Apache, PHP and rsync...', 25)
         print(f"[STEP 3] Installing Apache, PHP and rsync...")
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php rsync", timeout=180)
         exit_status = stdout.channel.recv_exit_status()
         print(f"[EXIT CODE] apt-get install: {exit_status}")
-        
+
         update_deployment_progress(deployment_id, 'Configuring Apache modules...', 40)
         print(f"[STEP 4] Configuring Apache modules...")
         for cmd in ["sudo a2enmod rewrite", "sudo a2enmod ssl"]:
@@ -583,7 +583,7 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
             exit_status = stdout.channel.recv_exit_status()
             print(f"  Exit code: {exit_status}")
-        
+
         update_deployment_progress(deployment_id, 'Creating web directory...', 50)
         print(f"[STEP 5] Creating web directory...")
         for cmd in [f"sudo mkdir -p /var/www/{domain}", f"sudo chown -R www-data:www-data /var/www/{domain}", f"sudo chmod -R 755 /var/www/{domain}"]:
@@ -591,58 +591,58 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=30)
             exit_status = stdout.channel.recv_exit_status()
             print(f"  Exit code: {exit_status}")
-        
+
         update_deployment_progress(deployment_id, 'Configuring virtual host...', 60)
         print(f"[STEP 6] Configuring virtual host...")
         vhost_config = f"""<VirtualHost *:80>
     ServerName {domain}
     {"ServerAlias *." + domain if is_wildcard else ""}
     DocumentRoot /var/www/{domain}
-    
+
     <Directory /var/www/{domain}>
         Options Indexes FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-    
+
     ErrorLog ${{APACHE_LOG_DIR}}/{domain}_error.log
     CustomLog ${{APACHE_LOG_DIR}}/{domain}_access.log combined
 </VirtualHost>
 """
-        
+
         sftp = ssh.open_sftp()
-        
+
         with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
             f.write(vhost_config)
         print(f"  Created vhost config: /tmp/{domain}.conf")
-        
+
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
         print(f"  Apache configured and reloaded")
-        
+
         update_deployment_progress(deployment_id, 'Uploading project files...', 70)
         local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         print(f"\n[STEP 7] Uploading project files...")
         print(f"  Local path: {local_project_path}")
         print(f"  Remote path: /var/www/{domain}")
-        
+
         # Verify local project path exists
         if not os.path.exists(local_project_path):
             error_msg = f"Local project path does not exist: {local_project_path}"
             print(f"[ERROR] {error_msg}")
             raise Exception(error_msg)
-        
+
         print(f"  Local path exists: ✓")
         print(f"  Starting parallel file upload...")
-        
+
         sftp = ssh.open_sftp()
         upload_directory_parallel(sftp, local_project_path, f"/var/www/{domain}", ssh)
         sftp.close()
-        
+
         print(f"[SUCCESS] Files uploaded")
-        
+
         update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
         print(f"\n[STEP 8] Setting file permissions...")
         ssh.exec_command(f"sudo mkdir -p /var/www/{domain}/page/result")
@@ -650,17 +650,17 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         ssh.exec_command(f"sudo chmod -R 755 /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
         print(f"  Permissions set")
-        
+
         sftp.close()
         ssh.close()
-        
+
         print(f"\n{'='*60}")
         print(f"DEPLOYMENT COMPLETED SUCCESSFULLY")
         print(f"{'='*60}\n")
-        
+
         log_action('Deployment Complete', f"Successfully deployed to {domain}", server.id)
         return True, "Deployment successful"
-        
+
     except Exception as e:
         print(f"\n{'!'*60}")
         print(f"DEPLOYMENT FAILED")
@@ -677,7 +677,7 @@ def deploy_project(server, password, domain, is_wildcard):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-        
+
         commands = [
             "sudo apt-get update -y",
             "sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php",
@@ -687,160 +687,171 @@ def deploy_project(server, password, domain, is_wildcard):
             f"sudo chown -R www-data:www-data /var/www/{domain}",
             f"sudo chmod -R 755 /var/www/{domain}",
         ]
-        
+
         for cmd in commands:
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=120)
             stdout.channel.recv_exit_status()
-        
+
         vhost_config = f"""<VirtualHost *:80>
     ServerName {domain}
     {"ServerAlias *." + domain if is_wildcard else ""}
     DocumentRoot /var/www/{domain}
-    
+
     <Directory /var/www/{domain}>
         Options Indexes FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-    
+
     ErrorLog ${{APACHE_LOG_DIR}}/{domain}_error.log
     CustomLog ${{APACHE_LOG_DIR}}/{domain}_access.log combined
 </VirtualHost>
 """
-        
+
         sftp = ssh.open_sftp()
-        
+
         with sftp.file(f'/tmp/{domain}.conf', 'w') as f:
             f.write(vhost_config)
-        
+
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
         ssh.exec_command("sudo systemctl reload apache2")
-        
+
         local_project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
+
         upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
-        
+
         ssh.exec_command(f"sudo mkdir -p /var/www/{domain}/page/result")
         ssh.exec_command(f"sudo chown -R www-data:www-data /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 755 /var/www/{domain}")
         ssh.exec_command(f"sudo chmod -R 777 /var/www/{domain}/page/result")
-        
+
         sftp.close()
         ssh.close()
-        
+
         log_action('Deployment Complete', f"Successfully deployed to {domain}", server.id)
         return True, "Deployment successful"
-        
+
     except Exception as e:
         log_action('Deployment Failed', f"Failed to deploy to {domain}: {str(e)}", server.id)
         return False, str(e)
 
 
-def upload_directory_parallel(sftp, local_path, remote_path, ssh):
+def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=10, exclude_dirs=None, exclude_files=None):
+    if exclude_dirs is None:
+        exclude_dirs = []
+    if exclude_files is None:
+        exclude_files = []
     """Upload directory with parallel file transfers"""
     import os
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    
-    exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
-    exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
-    
+
     files_to_upload = []
-    
+
     # Collect all files first
     for root, dirs, files in os.walk(local_path):
-        # Filter out excluded directories
-        dirs[:] = [d for d in dirs if d not in exclude_dirs and not d.startswith('.')]
-        
-        for file in files:
-            if file in exclude_files or file.startswith('.'):
+        # Remove excluded directories from the walk
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+
+        for filename in files:
+            # Skip excluded files
+            if filename in exclude_files:
                 continue
-            
-            local_file = os.path.join(root, file)
+
+            local_file = os.path.join(root, filename)
             relative_path = os.path.relpath(local_file, local_path)
             remote_file = os.path.join(remote_path, relative_path).replace('\\', '/')
             files_to_upload.append((local_file, remote_file))
-    
+
     print(f"Found {len(files_to_upload)} files to upload")
-    
+
     # Create all directories first
     dirs_created = set()
     for _, remote_file in files_to_upload:
         remote_dir = os.path.dirname(remote_file)
         if remote_dir not in dirs_created:
+            # Use sudo for mkdir to ensure permissions
             ssh.exec_command(f"sudo mkdir -p {remote_dir}")
             dirs_created.add(remote_dir)
-    
-    # Upload files in parallel (4 threads)
+
+    # Upload files in parallel (max_workers threads)
     uploaded = 0
     failed = 0
-    
+
     def upload_file(local_file, remote_file):
         try:
             sftp.put(local_file, remote_file)
             return True
-        except:
+        except Exception as e:
+            print(f"Error uploading {local_file} to {remote_file}: {e}")
+            # Attempt to create directory if it failed, then retry upload
             try:
-                ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_file)}")
+                remote_dir = os.path.dirname(remote_file)
+                ssh.exec_command(f"sudo mkdir -p {remote_dir}")
                 sftp.put(local_file, remote_file)
                 return True
-            except:
+            except Exception as e_retry:
+                print(f"Retry upload failed for {local_file}: {e_retry}")
                 return False
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(upload_file, lf, rf): (lf, rf) for lf, rf in files_to_upload}
-        
+
         for future in as_completed(futures):
             if future.result():
                 uploaded += 1
             else:
                 failed += 1
-            
+
+            # Print progress periodically
             if (uploaded + failed) % 50 == 0:
-                print(f"Progress: {uploaded + failed}/{len(files_to_upload)} files")
-    
+                print(f"Progress: {uploaded + failed}/{len(files_to_upload)} files uploaded")
+
     print(f"Upload complete: {uploaded} succeeded, {failed} failed")
-    return uploaded > 0
+    if failed > 0:
+        raise Exception(f"{failed} files failed to upload.")
+    return True
+
 
 def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
     import os
-    
+
     indent = "  " * depth
     exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
     exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
-    
+
     print(f"{indent}📁 Scanning: {local_path}")
-    
+
     # Check if local path exists
     if not os.path.exists(local_path):
         print(f"{indent}⚠️  Path does not exist: {local_path}")
         return
-    
+
     try:
         items = os.listdir(local_path)
         print(f"{indent}   Found {len(items)} items")
     except (PermissionError, OSError) as e:
         print(f"{indent}⚠️  Cannot access directory {local_path}: {e}")
         return
-    
+
     uploaded_count = 0
     skipped_count = 0
-    
+
     for item in items:
         if item in exclude_dirs or item in exclude_files or item.startswith('.'):
             print(f"{indent}   ⊘ Excluded: {item}")
             skipped_count += 1
             continue
-            
+
         local_item = os.path.join(local_path, item)
         remote_item = f"{remote_path}/{item}"
-        
+
         # Check if local item exists and is accessible
         if not os.path.exists(local_item):
             print(f"{indent}⚠️  Skipping non-existent: {local_item}")
             skipped_count += 1
             continue
-        
+
         try:
             if os.path.isfile(local_item):
                 file_size = os.path.getsize(local_item)
@@ -868,7 +879,7 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
             print(f"{indent}❌ Failed to upload {local_item}: {e}")
             skipped_count += 1
             continue
-    
+
     print(f"{indent}✓ Completed: {uploaded_count} uploaded, {skipped_count} skipped")
 
 
@@ -877,45 +888,45 @@ def run_ssl_activation_background(app_context, server_id, deployment_id, passwor
         try:
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'running', 'step': 'Starting SSL activation...', 'progress': 0}
-            
+
             server = VPSServer.query.get(server_id)
             deployment = Deployment.query.get(deployment_id)
-            
+
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'running', 'step': 'Connecting to server...', 'progress': 10}
-            
+
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-            
+
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'running', 'step': 'Installing Certbot...', 'progress': 30}
-            
+
             stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
             stdout.channel.recv_exit_status()
-            
+
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'running', 'step': 'Generating SSL certificate...', 'progress': 60}
-            
+
             if deployment.is_wildcard:
                 cmd = f"sudo certbot --apache -d {deployment.domain} -d '*.{deployment.domain}' --non-interactive --agree-tos --email admin@{deployment.domain} --redirect"
             else:
                 cmd = f"sudo certbot --apache -d {deployment.domain} --non-interactive --agree-tos --email admin@{deployment.domain} --redirect"
-            
+
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
             stdout.channel.recv_exit_status()
-            
+
             ssh.close()
-            
+
             deployment.ssl_enabled = True
             deployment.admin_url = f"https://{deployment.domain}/admin"
             db.session.commit()
-            
+
             log_action('SSL Activated', f"SSL enabled for {deployment.domain}", server.id)
-            
+
             with deployment_lock:
                 ssl_status[deployment_id] = {'status': 'completed', 'step': 'SSL activated successfully!', 'progress': 100}
-            
+
         except Exception as e:
             try:
                 db.session.rollback()
@@ -934,20 +945,20 @@ def run_ssl_activation_background(app_context, server_id, deployment_id, passwor
 @app.route('/vps/<int:server_id>/format', methods=['POST'])
 def format_vps(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    
+
     if not server.is_active:
         return jsonify({'success': False, 'message': 'Server is not active'})
-    
+
     password = decrypt_password_safe(server.ssh_password)
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
-    
+
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         if ssh_key:
             from io import StringIO
             try:
@@ -963,46 +974,46 @@ def format_vps(server_id):
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
         else:
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-        
+
         # Get all deployments for this server
         deployments = Deployment.query.filter_by(server_id=server_id).all()
         domains_cleaned = []
-        
+
         for deployment in deployments:
             domain = deployment.domain
-            
+
             # Disable Apache site
             ssh.exec_command(f"sudo a2dissite {domain}.conf", timeout=30)
-            
+
             # Remove Apache config
             ssh.exec_command(f"sudo rm -f /etc/apache2/sites-available/{domain}.conf", timeout=30)
-            
+
             # Remove SSL certificates
             ssh.exec_command(f"sudo certbot delete --cert-name {domain} --non-interactive", timeout=60)
-            
+
             # Remove web files
             ssh.exec_command(f"sudo rm -rf /var/www/{domain}", timeout=60)
-            
+
             domains_cleaned.append(domain)
-        
+
         # Reload Apache
         ssh.exec_command("sudo systemctl reload apache2", timeout=30)
-        
+
         ssh.close()
-        
+
         # Delete deployment records from database
         DeploymentHistory.query.filter(DeploymentHistory.deployment_id.in_([d.id for d in deployments])).delete(synchronize_session=False)
         Deployment.query.filter_by(server_id=server_id).delete()
         db.session.commit()
-        
+
         log_action('VPS Formatted', f"Formatted VPS {server.name} - Removed {len(domains_cleaned)} deployments", server.id)
-        
+
         message = f"Successfully formatted VPS.\nRemoved {len(domains_cleaned)} deployment(s)."
         if domains_cleaned:
             message += f"\n\nCleaned domains: {', '.join(domains_cleaned)}"
-        
+
         return jsonify({'success': True, 'message': message})
-        
+
     except Exception as e:
         log_action('VPS Format Failed', f"Failed to format VPS {server.name}: {str(e)}", server.id)
         return jsonify({'success': False, 'message': str(e)})
@@ -1012,21 +1023,21 @@ def format_vps(server_id):
 def activate_ssl(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
     deployment = Deployment.query.get_or_404(deployment_id)
-    
+
     if not server.is_active:
         return jsonify({'success': False, 'message': 'Server is not active'})
-    
+
     password = decrypt_password_safe(server.ssh_password)
     if password is None:
         return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
-    
+
     thread = threading.Thread(
         target=run_ssl_activation_background,
         args=(app.app_context(), server_id, deployment_id, password)
     )
     thread.daemon = True
     thread.start()
-    
+
     return jsonify({'success': True, 'message': 'SSL activation started. This may take a few minutes.'})
 
 
@@ -1034,10 +1045,10 @@ def activate_ssl(server_id, deployment_id):
 def get_ssl_status(deployment_id):
     with deployment_lock:
         status = ssl_status.get(deployment_id, None)
-    
+
     if status:
         return jsonify(status)
-    
+
     deployment = Deployment.query.get(deployment_id)
     if deployment:
         return jsonify({
@@ -1045,7 +1056,7 @@ def get_ssl_status(deployment_id):
             'step': 'SSL enabled' if deployment.ssl_enabled else 'SSL not configured',
             'progress': 100 if deployment.ssl_enabled else 0
         })
-    
+
     return jsonify({'status': 'unknown', 'step': 'Unknown deployment', 'progress': 0})
 
 
@@ -1053,52 +1064,52 @@ def get_ssl_status(deployment_id):
 def bulk_check_status():
     servers = VPSServer.query.all()
     results = []
-    
+
     for server in servers:
         password = decrypt_password_safe(server.ssh_password)
         if password:
             was_active = server.is_active
             is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password)
-            
+
             server.is_active = is_active
             server.last_checked = datetime.utcnow()
-            
+
             if is_active:
                 resources = get_server_resources(server)
                 if resources:
                     server.cpu_usage = resources['cpu']
                     server.ram_usage = resources['ram']
                     server.disk_usage = resources['disk']
-            
+
             results.append({
                 'id': server.id,
                 'name': server.name,
                 'active': is_active,
                 'message': message
             })
-            
+
             if was_active and not is_active:
                 settings = NotificationSettings.query.first()
                 if settings and settings.notify_offline:
                     send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
-    
+
     db.session.commit()
     log_action('Bulk Status Check', f"Checked {len(servers)} servers")
-    
+
     return jsonify({'success': True, 'results': results})
 
 
 @app.route('/delete-vps/<int:server_id>', methods=['POST'])
 def delete_vps(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    
+
     Deployment.query.filter_by(server_id=server_id).delete()
-    
+
     log_action('VPS Deleted', f"Deleted VPS: {server.name} ({server.ip_address})", server.id)
-    
+
     db.session.delete(server)
     db.session.commit()
-    
+
     flash(f'VPS "{server.name}" deleted successfully.', 'success')
     return redirect(url_for('index'))
 
@@ -1112,53 +1123,53 @@ def view_logs():
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     notification_settings = NotificationSettings.query.first()
-    
+
     if request.method == 'POST':
         if not notification_settings:
             notification_settings = NotificationSettings()
             db.session.add(notification_settings)
-        
+
         notification_settings.telegram_enabled = request.form.get('telegram_enabled') == 'on'
         notification_settings.telegram_bot_token = request.form.get('telegram_bot_token', '')
         notification_settings.telegram_chat_id = request.form.get('telegram_chat_id', '')
-        
+
         notification_settings.email_enabled = request.form.get('email_enabled') == 'on'
         notification_settings.email_smtp_server = request.form.get('email_smtp_server', '')
         notification_settings.email_smtp_port = int(request.form.get('email_smtp_port', 587))
         notification_settings.email_username = request.form.get('email_username', '')
-        
+
         email_password = request.form.get('email_password', '')
         if email_password:
             notification_settings.email_password = encrypt_password(email_password)
-        
+
         notification_settings.email_recipient = request.form.get('email_recipient', '')
         notification_settings.notify_offline = request.form.get('notify_offline') == 'on'
         notification_settings.notify_deployment = request.form.get('notify_deployment') == 'on'
-        
+
         db.session.commit()
-        
+
         log_action('Settings Updated', 'Notification settings updated')
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('settings'))
-    
+
     return render_template('settings.html', settings=notification_settings)
 
 
 @app.route('/api/resources/<int:server_id>')
 def get_resources(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    
+
     if not server.is_active:
         return jsonify({'error': 'Server is offline'})
-    
+
     resources = get_server_resources(server)
-    
+
     if resources:
         server.cpu_usage = resources['cpu']
         server.ram_usage = resources['ram']
         server.disk_usage = resources['disk']
         db.session.commit()
-    
+
     return jsonify(resources if resources else {'error': 'Failed to fetch resources'})
 
 
@@ -1171,14 +1182,14 @@ def backup_page():
 def backup_export():
     import json
     from flask import make_response
-    
+
     servers = VPSServer.query.all()
     backup_data = {
         'version': '1.0',
         'exported_at': datetime.utcnow().isoformat(),
         'servers': []
     }
-    
+
     for server in servers:
         backup_data['servers'].append({
             'name': server.name,
@@ -1188,11 +1199,11 @@ def backup_export():
             'group': server.group,
             'tags': server.tags
         })
-    
+
     response = make_response(json.dumps(backup_data, indent=2))
     response.headers['Content-Type'] = 'application/json'
     response.headers['Content-Disposition'] = f'attachment; filename=vps_backup_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.json'
-    
+
     log_action('Backup Export', f'Exported {len(servers)} VPS configurations')
     return response
 
@@ -1200,17 +1211,17 @@ def backup_export():
 @app.route('/backup/import', methods=['POST'])
 def backup_import():
     import json
-    
+
     if 'backup_file' not in request.files:
         flash('No file uploaded', 'error')
         return redirect(url_for('backup_page'))
-    
+
     file = request.files['backup_file']
-    
+
     try:
         data = json.load(file)
         imported_count = 0
-        
+
         for server_data in data.get('servers', []):
             # Check if server already exists
             existing = VPSServer.query.filter_by(ip_address=server_data['ip_address']).first()
@@ -1226,14 +1237,14 @@ def backup_import():
                 )
                 db.session.add(server)
                 imported_count += 1
-        
+
         db.session.commit()
         log_action('Backup Import', f'Imported {imported_count} VPS configurations')
         flash(f'Successfully imported {imported_count} VPS configurations. Please add credentials manually.', 'success')
-        
+
     except Exception as e:
         flash(f'Import failed: {str(e)}', 'error')
-    
+
     return redirect(url_for('index'))
 
 
