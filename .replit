@@ -39,10 +39,6 @@ waitForPort = 5000
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 37895
-externalPort = 3000
-
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "cd vps_manager && gunicorn --bind 0.0.0.0:5000 app:app"]
