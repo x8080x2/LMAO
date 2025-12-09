@@ -50,15 +50,26 @@ try:
         else:
             print("✓ 'error_message' column already exists")
         
+        # Check if files_hash column exists
+        result = conn.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='deployments' AND column_name='files_hash'
+        """))
+        
+        if result.fetchone() is None:
+            print("Adding 'files_hash' column to deployments table...")
+            conn.execute(text("""
+                ALTER TABLE deployments 
+                ADD COLUMN files_hash VARCHAR(64)
+            """))
+            conn.commit()
+            print("✓ Added 'files_hash' column")
+        else:
+            print("✓ 'files_hash' column already exists")
+        
         print("\nMigration completed successfully!")
         
 except Exception as e:
     print(f"Migration failed: {str(e)}")
     exit(1)
-import os
-from app import app, db
-
-# Ensure the database is created
-with app.app_context():
-    db.create_all()
-    print("Database tables created successfully!")
