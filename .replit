@@ -41,5 +41,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd vps_manager && gunicorn --bind 0.0.0.0:5000 app:app"]
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
 build = ["sh", "-c", "pip install -r vps_manager/requirements.txt 2>/dev/null || echo 'No requirements file found'"]
