@@ -1,0 +1,112 @@
+[2025-12-09 14:20:35 +0000] [5544] [INFO] Starting gunicorn 23.0.0
+[2025-12-09 14:20:35 +0000] [5544] [INFO] Listening at: http://0.0.0.0:5000 (5544)
+[2025-12-09 14:20:35 +0000] [5544] [INFO] Using worker: sync
+[2025-12-09 14:20:35 +0000] [5544] [INFO] Handling signal: winchd: 5572
+[2025-12-09 14:20:35 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:36 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:36 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:36 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:37 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:37 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:37 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:38 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:38 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:39 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:39 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:39 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:40 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:40 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:41 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:41 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:41 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:41 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:42 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:42 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:42 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:43 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:43 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:43 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:44 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:44 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:44 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:44 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:45 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:45 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:45 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:45 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:46 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:46,362] ERROR in app: Exception on /vps/1 [GET]
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedColumn: column deployments.files_hash does not exist
+LINE 1: ...ments.error_message AS deployments_error_message, deployment...
+                                                             ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/vps_manager/app.py", line 404, in view_vps
+    deployments = Deployment.query.filter_by(server_id=server_id).all()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2704, in all
+    return self._iter().all()  # type: ignore
+           ^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/query.py", line 2857, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/session.py", line 2249, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column deployments.files_hash does not exist
+LINE 1: ...ments.error_message AS deployments_error_message, deployment...
+                                                             ^
+
+[SQL: SELECT deployments.id AS deployments_id, deployments.server_id AS deployments_server_id, deployments.domain AS deployments_domain, deployments.is_wildcard AS deployments_is_wildcard, deployments.ssl_enabled AS deployments_ssl_enabled, deployments.status AS deployments_status, deployments.deployed_at AS deployments_deployed_at, deployments.admin_url AS deployments_admin_url, deployments.version AS deployments_version, deployments.error_message AS deployments_error_message, deployments.files_hash AS deployments_files_hash 
+FROM deployments 
+WHERE deployments.server_id = %(server_id_1)s]
+[parameters: {'server_id_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+[2025-12-09 14:20:46 +0000] [5544] [INFO] Handling signal: winch
+[2025-12-09 14:20:46 +0000] [5544] [INFO] Handling signal: winch
