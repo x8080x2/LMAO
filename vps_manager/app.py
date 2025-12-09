@@ -501,7 +501,7 @@ def deploy(server_id):
         server_data = {'id': server.id}
         thread = threading.Thread(
             target=run_deployment_background,
-            args=(app.app_context(), deployment.id, server_data, password, domain, is_wildcard, auto_ssl)
+            args=(app.app_context(), deployment.id, server_data, password, domain, is_wildcard)
         )
         thread.daemon = True
         thread.start()
