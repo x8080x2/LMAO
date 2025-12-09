@@ -21,7 +21,7 @@
                         <small class="text-muted">Enter the domain without http:// or https://</small>
                     </div>
                     
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="is_wildcard" name="is_wildcard">
                             <label class="form-check-label" for="is_wildcard">
@@ -29,6 +29,26 @@
                             </label>
                         </div>
                         <small class="text-muted">Wildcard SSL requires DNS verification. Make sure your domain's DNS is properly configured.</small>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="auto_ssl" name="auto_ssl" checked>
+                            <label class="form-check-label" for="auto_ssl">
+                                <i class="bi bi-shield-lock me-1"></i>Auto-activate SSL after deployment
+                            </label>
+                        </div>
+                        <small class="text-muted">Automatically install Let's Encrypt SSL certificate after deployment completes.</small>
+                    </div>
+                    
+                    <div class="alert alert-warning mb-4">
+                        <h6><i class="bi bi-cloud me-2"></i>Using Cloudflare?</h6>
+                        <p class="mb-2 small">If your domain uses Cloudflare, you may need to:</p>
+                        <ol class="mb-0 ps-3 small">
+                            <li><strong>Temporarily disable proxy</strong> (orange cloud → gray) for SSL certificate installation</li>
+                            <li>After SSL is activated, enable proxy again and set SSL mode to <strong>"Full (strict)"</strong></li>
+                            <li>Or, keep proxy enabled and set SSL mode to <strong>"Flexible"</strong> (less secure)</li>
+                        </ol>
                     </div>
                     
                     <div class="card bg-dark mb-4">
@@ -40,6 +60,7 @@
                                 <li>Upload project files via SFTP</li>
                                 <li>Set proper file permissions</li>
                                 <li>Enable Apache site configuration</li>
+                                <li id="sslStep" style="display: none;">Install Let's Encrypt SSL certificate</li>
                             </ol>
                         </div>
                     </div>
@@ -75,6 +96,18 @@
 let deploymentId = null;
 let progressInterval = null;
 
+// Toggle SSL step visibility based on checkbox
+document.getElementById('auto_ssl')?.addEventListener('change', function(e) {
+    document.getElementById('sslStep').style.display = e.target.checked ? 'list-item' : 'none';
+});
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    const autoSsl = document.getElementById('auto_ssl');
+    if (autoSsl && autoSsl.checked) {
+        document.getElementById('sslStep').style.display = 'list-item';
+    }
+});
+
 document.getElementById('deployForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -84,31 +117,28 @@ document.getElementById('deployForm').addEventListener('submit', function(e) {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting...';
     btn.disabled = true;
     
-    // Submit form via fetch to get deployment ID
-    fetch(form.action, {
+    // Submit form via fetch with explicit JSON request
+    fetch(form.action || window.location.href, {
         method: 'POST',
-        body: new FormData(form)
+        body: new FormData(form),
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
     })
-    .then(response => response.text())
-    .then(html => {
-        // Parse the response to extract deployment ID
-        // Since we're redirecting, we need to change the approach
-        // Hide form, show progress
-        form.style.display = 'none';
-        document.getElementById('progressSection').style.display = 'block';
-        
-        // Get the latest deployment for this server
-        fetch('/api/latest-deployment/{{ server.id }}')
-        .then(r => r.json())
-        .then(data => {
-            if (data.deployment_id) {
-                deploymentId = data.deployment_id;
-                startProgressPolling();
-            }
-        });
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.deployment_id) {
+            // Hide form, show progress
+            form.style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            deploymentId = data.deployment_id;
+            startProgressPolling();
+        } else {
+            throw new Error(data.message || 'Failed to start deployment');
+        }
     })
     .catch(error => {
-        alert('Error starting deployment: ' + error);
+        alert('Error starting deployment: ' + error.message);
         btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i>Start Deployment';
         btn.disabled = false;
     });

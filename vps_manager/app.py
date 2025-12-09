@@ -480,6 +480,7 @@ def deploy(server_id):
     if request.method == 'POST':
         domain = request.form.get('domain')
         is_wildcard = request.form.get('is_wildcard') == 'on'
+        auto_ssl = request.form.get('auto_ssl') == 'on'
 
         password = decrypt_password_safe(server.ssh_password)
         if password is None:
@@ -495,12 +496,12 @@ def deploy(server_id):
         db.session.add(deployment)
         db.session.commit()
 
-        log_action('Deployment Started', f"Deploying to {domain} on {server.name}", server.id)
+        log_action('Deployment Started', f"Deploying to {domain} on {server.name} (auto_ssl: {auto_ssl})", server.id)
 
         server_data = {'id': server.id}
         thread = threading.Thread(
             target=run_deployment_background,
-            args=(app.app_context(), deployment.id, server_data, password, domain, is_wildcard)
+            args=(app.app_context(), deployment.id, server_data, password, domain, is_wildcard, auto_ssl)
         )
         thread.daemon = True
         thread.start()

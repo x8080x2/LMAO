@@ -152,6 +152,24 @@
 
 {% block scripts %}
 <script>
+// Auto-refresh for deploying deployments
+let refreshInterval = null;
+
+function startAutoRefresh() {
+    // Check if any deployments are in 'deploying' status
+    const deployingBadges = document.querySelectorAll('.badge.bg-warning');
+    if (deployingBadges.length > 0) {
+        if (!refreshInterval) {
+            refreshInterval = setInterval(function() {
+                location.reload();
+            }, 5000);
+        }
+    }
+}
+
+// Start auto-refresh on page load
+document.addEventListener('DOMContentLoaded', startAutoRefresh);
+
 // Enable format button only when user types "FORMAT"
 document.getElementById('formatConfirmInput')?.addEventListener('input', function(e) {
     const btn = document.getElementById('confirmFormatBtn');
@@ -163,10 +181,19 @@ document.getElementById('formatConfirmInput')?.addEventListener('input', functio
 });
 
 function checkStatus() {
+    const btn = event.target;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking...';
+    btn.disabled = true;
+    
     fetch('/check-status/{{ server.id }}')
         .then(response => response.json())
         .then(data => {
             location.reload();
+        })
+        .catch(error => {
+            alert('Error checking status: ' + error);
+            btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Refresh Status';
+            btn.disabled = false;
         });
 }
 
