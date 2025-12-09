@@ -1,0 +1,50 @@
+[2025-12-09 15:46:08 +0000] [13898] [INFO] Starting gunicorn 23.0.0
+[2025-12-09 15:46:08 +0000] [13898] [INFO] Listening at: http://0.0.0.0:5000 (13898)
+[2025-12-09 15:46:08 +0000] [13898] [INFO] Using worker: sync
+[2025-12-09 15:46:08 +0000] [13898] [INFO] Handling signal: winchd: 13910
+[2025-12-09 15:46:08 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:09 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:09 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:09 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:09 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:10 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:10 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:10 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:10 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:11 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:11 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:11 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:11 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:12 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:12 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:12 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:12 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:13 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:13 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:13 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:13 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:14 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:14 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:14 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:14 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:15 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:15 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:15 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:15 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:16 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:16 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:16 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:16 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:17 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:17 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:17 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:17 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:18 +0000] [13898] [INFO] Handling signal: winch
+[2025-12-09 15:46:18 +0000] [13898] [INFO] Handling signal: winch
+Exception in thread Thread-12 (run_deployment_background):
+Traceback (most recent call last):
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "/nix/store/7d088dip86hlzri9sk0h78b63yfmx0a0-python3-3.11.13/lib/python3.11/threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+TypeError: run_deployment_background() takes 6 positional arguments but 7 were given
