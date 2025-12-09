@@ -570,9 +570,9 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         exit_status = stdout.channel.recv_exit_status()
         print(f"[EXIT CODE] apt-get update: {exit_status}")
         
-        update_deployment_progress(deployment_id, 'Installing Apache and PHP...', 25)
-        print(f"[STEP 3] Installing Apache and PHP...")
-        stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php", timeout=180)
+        update_deployment_progress(deployment_id, 'Installing Apache, PHP and rsync...', 25)
+        print(f"[STEP 3] Installing Apache, PHP and rsync...")
+        stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y apache2 php php-curl php-json libapache2-mod-php rsync", timeout=180)
         exit_status = stdout.channel.recv_exit_status()
         print(f"[EXIT CODE] apt-get install: {exit_status}")
         
@@ -635,26 +635,11 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             raise Exception(error_msg)
         
         print(f"  Local path exists: ✓")
-        print(f"  Starting fast file upload with rsync...")
+        print(f"  Starting parallel file upload...")
         
-        # Use rsync for much faster upload
-        exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
-        exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
-        
-        exclude_args = ' '.join([f"--exclude='{item}'" for item in exclude_dirs + exclude_files])
-        
-        rsync_cmd = f"rsync -avz --progress {exclude_args} -e 'ssh -p {server.ssh_port} -o StrictHostKeyChecking=no' {local_project_path}/ {server.ssh_user}@{server.ip_address}:/var/www/{domain}/"
-        
-        import subprocess
-        result = subprocess.run(rsync_cmd, shell=True, capture_output=True, text=True, timeout=300)
-        
-        if result.returncode != 0:
-            print(f"[WARNING] Rsync failed, falling back to SFTP: {result.stderr}")
-            sftp = ssh.open_sftp()
-            upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
-            sftp.close()
-        else:
-            print(f"[SUCCESS] Files uploaded via rsync")
+        sftp = ssh.open_sftp()
+        upload_directory_parallel(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        sftp.close()
         
         print(f"[SUCCESS] Files uploaded")
         
