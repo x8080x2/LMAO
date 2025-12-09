@@ -77,6 +77,7 @@ class Deployment(db.Model):
     admin_url = db.Column(db.String(500))
     version = db.Column(db.Integer, default=1)
     error_message = db.Column(db.Text)
+    files_hash = db.Column(db.String(64))  # MD5 hash of deployed files for incremental updates
     
     history = db.relationship('DeploymentHistory', backref='deployment', lazy=True, order_by='DeploymentHistory.created_at.desc()')
 
@@ -634,8 +635,27 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             raise Exception(error_msg)
         
         print(f"  Local path exists: ✓")
-        print(f"  Starting file upload...")
-        upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
+        print(f"  Starting fast file upload with rsync...")
+        
+        # Use rsync for much faster upload
+        exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
+        exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
+        
+        exclude_args = ' '.join([f"--exclude='{item}'" for item in exclude_dirs + exclude_files])
+        
+        rsync_cmd = f"rsync -avz --progress {exclude_args} -e 'ssh -p {server.ssh_port} -o StrictHostKeyChecking=no' {local_project_path}/ {server.ssh_user}@{server.ip_address}:/var/www/{domain}/"
+        
+        import subprocess
+        result = subprocess.run(rsync_cmd, shell=True, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode != 0:
+            print(f"[WARNING] Rsync failed, falling back to SFTP: {result.stderr}")
+            sftp = ssh.open_sftp()
+            upload_directory(sftp, local_project_path, f"/var/www/{domain}", ssh)
+            sftp.close()
+        else:
+            print(f"[SUCCESS] Files uploaded via rsync")
+        
         print(f"[SUCCESS] Files uploaded")
         
         update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
@@ -731,6 +751,71 @@ def deploy_project(server, password, domain, is_wildcard):
         log_action('Deployment Failed', f"Failed to deploy to {domain}: {str(e)}", server.id)
         return False, str(e)
 
+
+def upload_directory_parallel(sftp, local_path, remote_path, ssh):
+    """Upload directory with parallel file transfers"""
+    import os
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.upm', '.cache', 'node_modules']
+    exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
+    
+    files_to_upload = []
+    
+    # Collect all files first
+    for root, dirs, files in os.walk(local_path):
+        # Filter out excluded directories
+        dirs[:] = [d for d in dirs if d not in exclude_dirs and not d.startswith('.')]
+        
+        for file in files:
+            if file in exclude_files or file.startswith('.'):
+                continue
+            
+            local_file = os.path.join(root, file)
+            relative_path = os.path.relpath(local_file, local_path)
+            remote_file = os.path.join(remote_path, relative_path).replace('\\', '/')
+            files_to_upload.append((local_file, remote_file))
+    
+    print(f"Found {len(files_to_upload)} files to upload")
+    
+    # Create all directories first
+    dirs_created = set()
+    for _, remote_file in files_to_upload:
+        remote_dir = os.path.dirname(remote_file)
+        if remote_dir not in dirs_created:
+            ssh.exec_command(f"sudo mkdir -p {remote_dir}")
+            dirs_created.add(remote_dir)
+    
+    # Upload files in parallel (4 threads)
+    uploaded = 0
+    failed = 0
+    
+    def upload_file(local_file, remote_file):
+        try:
+            sftp.put(local_file, remote_file)
+            return True
+        except:
+            try:
+                ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_file)}")
+                sftp.put(local_file, remote_file)
+                return True
+            except:
+                return False
+    
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(upload_file, lf, rf): (lf, rf) for lf, rf in files_to_upload}
+        
+        for future in as_completed(futures):
+            if future.result():
+                uploaded += 1
+            else:
+                failed += 1
+            
+            if (uploaded + failed) % 50 == 0:
+                print(f"Progress: {uploaded + failed}/{len(files_to_upload)} files")
+    
+    print(f"Upload complete: {uploaded} succeeded, {failed} failed")
+    return uploaded > 0
 
 def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
     import os
