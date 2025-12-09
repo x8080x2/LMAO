@@ -619,8 +619,9 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
 
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
-        ssh.exec_command("sudo systemctl reload apache2")
-        print(f"  Apache configured and reloaded")
+        ssh.exec_command("sudo systemctl enable apache2")
+        ssh.exec_command("sudo systemctl restart apache2")
+        print(f"  Apache configured, enabled and restarted")
 
         update_deployment_progress(deployment_id, 'Uploading project files...', 70)
         workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -746,7 +747,8 @@ def deploy_project(server, password, domain, is_wildcard):
 
         ssh.exec_command(f"sudo mv /tmp/{domain}.conf /etc/apache2/sites-available/{domain}.conf")
         ssh.exec_command(f"sudo a2ensite {domain}.conf")
-        ssh.exec_command("sudo systemctl reload apache2")
+        ssh.exec_command("sudo systemctl enable apache2")
+        ssh.exec_command("sudo systemctl restart apache2")
 
         workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
