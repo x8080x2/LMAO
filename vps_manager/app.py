@@ -786,14 +786,14 @@ def deploy_project(server, password, domain, is_wildcard):
         return False, str(e)
 
 
-def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=10, exclude_dirs=None, exclude_files=None):
+def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=1, exclude_dirs=None, exclude_files=None):
+    """Upload directory with sequential file transfers for stability"""
     if exclude_dirs is None:
         exclude_dirs = []
     if exclude_files is None:
         exclude_files = []
-    """Upload directory with parallel file transfers"""
     import os
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time
 
     files_to_upload = []
 
@@ -814,50 +814,52 @@ def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=10
 
     print(f"Found {len(files_to_upload)} files to upload")
 
-    # Create all directories first
-    dirs_created = set()
+    # Create all directories first (batch them to reduce commands)
+    dirs_to_create = set()
     for _, remote_file in files_to_upload:
         remote_dir = os.path.dirname(remote_file)
-        if remote_dir not in dirs_created:
-            # Use sudo for mkdir to ensure permissions
-            ssh.exec_command(f"sudo mkdir -p {remote_dir}")
-            dirs_created.add(remote_dir)
+        dirs_to_create.add(remote_dir)
+    
+    # Create directories in batches
+    dirs_list = sorted(list(dirs_to_create))
+    batch_size = 50
+    for i in range(0, len(dirs_list), batch_size):
+        batch = dirs_list[i:i+batch_size]
+        dirs_cmd = " ".join([f'"{d}"' for d in batch])
+        ssh.exec_command(f"sudo mkdir -p {dirs_cmd}")
+        time.sleep(0.1)  # Small delay between batches
 
-    # Upload files in parallel (max_workers threads)
+    # Upload files sequentially with retries for stability
     uploaded = 0
     failed = 0
+    failed_files = []
 
-    def upload_file(local_file, remote_file):
-        try:
-            sftp.put(local_file, remote_file)
-            return True
-        except Exception as e:
-            print(f"Error uploading {local_file} to {remote_file}: {e}")
-            # Attempt to create directory if it failed, then retry upload
+    for local_file, remote_file in files_to_upload:
+        success = False
+        for attempt in range(3):  # Up to 3 attempts per file
             try:
-                remote_dir = os.path.dirname(remote_file)
-                ssh.exec_command(f"sudo mkdir -p {remote_dir}")
                 sftp.put(local_file, remote_file)
-                return True
-            except Exception as e_retry:
-                print(f"Retry upload failed for {local_file}: {e_retry}")
-                return False
+                success = True
+                break
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(0.5)  # Wait before retry
+                else:
+                    print(f"Failed to upload {local_file}: {e}")
+                    failed_files.append(local_file)
+        
+        if success:
+            uploaded += 1
+        else:
+            failed += 1
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(upload_file, lf, rf): (lf, rf) for lf, rf in files_to_upload}
-
-        for future in as_completed(futures):
-            if future.result():
-                uploaded += 1
-            else:
-                failed += 1
-
-            # Print progress periodically
-            if (uploaded + failed) % 50 == 0:
-                print(f"Progress: {uploaded + failed}/{len(files_to_upload)} files uploaded")
+        # Print progress periodically
+        if (uploaded + failed) % 100 == 0:
+            print(f"Progress: {uploaded + failed}/{len(files_to_upload)} files uploaded")
 
     print(f"Upload complete: {uploaded} succeeded, {failed} failed")
     if failed > 0:
+        print(f"Failed files: {failed_files[:10]}...")  # Show first 10 failed files
         raise Exception(f"{failed} files failed to upload.")
     return True
 
