@@ -1,0 +1,32 @@
+STEP 7] Uploading project files...
+  Workspace root: /home/runner/workspace
+  Remote path: /var/www/cat-yanbu.info
+  Allowed items: ['admin', 'page', 'qr', 'b64.php', 'config.php', 'fake.php', 'index.php']
+Running rsync command: rsync -avz --progress --exclude .git --exclude __pycache__ --exclude .cache --exclude node_modules --include admin/ --include page/ --include qr/ --include b64.php --include config.php --include fake.php --include index.php --include */ --exclude * /home/runner/workspace/ root@64.227.157.216:22/var/www/cat-yanbu.info/
+The authenticity of host '64.227.157.216 (64.227.157.216)' can't be established.
+ED25519 key fingerprint is SHA256:xzCbWSBOzmMmpkSMFllwvNZyh2IShAbxyz511qeXRwQ.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+root@64.227.157.216's password: 
+sending incremental file list
+Error during rsync upload: Rsync failed with error code 11: Warning: Permanently added '64.227.157.216' (ED25519) to the list of known hosts.
+rsync: [Receiver] mkdir "/root/22/var/www/cat-yanbu.info" failed: No such file or directory (2)
+rsync error: error in file IO (code 11) at main.c(791) [Receiver=3.2.7]
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+DEPLOYMENT FAILED
+Error: Rsync failed with error code 11: Warning: Permanently added '64.227.157.216' (ED25519) to the list of known hosts.
+rsync: [Receiver] mkdir "/root/22/var/www/cat-yanbu.info" failed: No such file or directory (2)
+rsync error: error in file IO (code 11) at main.c(791) [Receiver=3.2.7]
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/vps_manager/app.py", line 798, in deploy_project_with_progress
+    raise e
+  File "/home/runner/workspace/vps_manager/app.py", line 786, in deploy_project_with_progress
+    raise Exception(f"Rsync failed with error code {process.returncode}: {stderr}")
+Exception: Rsync failed with error code 11: Warning: Permanently added '64.227.157.216' (ED25519) to the list of known hosts.
+rsync: [Receiver] mkdir "/root/22/var/www/cat-yanbu.info" failed: No such file or directory (2)
+rsync error: error in file IO (code 11) at main.c(791) [Receiver=3.2.7]
