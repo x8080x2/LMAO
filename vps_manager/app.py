@@ -44,6 +44,36 @@ def decrypt_password(encrypted_password):
     return fernet.decrypt(encrypted_password.encode()).decode()
 
 
+def get_ssh_connection(server, timeout=30):
+    """Helper function to establish SSH connection with proper authentication"""
+    password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
+    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+    
+    if not password and not ssh_key:
+        raise Exception("No authentication method available")
+    
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    
+    if ssh_key:
+        from io import StringIO
+        try:
+            key_file = StringIO(ssh_key)
+            pkey = paramiko.RSAKey.from_private_key(key_file)
+        except:
+            try:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.Ed25519Key.from_private_key(key_file)
+            except:
+                key_file = StringIO(ssh_key)
+                pkey = paramiko.ECDSAKey.from_private_key(key_file)
+        ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=timeout)
+    elif password:
+        ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=timeout)
+    
+    return ssh
+
+
 class VPSServer(db.Model):
     __tablename__ = 'vps_servers'
 
