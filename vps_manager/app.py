@@ -1402,13 +1402,20 @@ def install_ssl_wildcard(server_id, deployment_id):
         else:
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
 
+        # Install certbot
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
         stdout.channel.recv_exit_status()
 
+        # Remove any conflicting SSL configs first
         domain = deployment.domain
+        ssh.exec_command(f"sudo rm -f /etc/apache2/sites-enabled/{domain}-le-ssl.conf", timeout=30)
+        ssh.exec_command(f"sudo rm -f /etc/apache2/sites-available/{domain}-le-ssl.conf", timeout=30)
+
         wildcard_success = False
+        exit_code = 1
 
         if deployment.is_wildcard and deployment.ssl_txt_value:
+            # For wildcard, use DNS challenge
             auth_script = f'''#!/bin/bash
 echo "{deployment.ssl_txt_value}"
 '''
@@ -1425,36 +1432,108 @@ echo "{deployment.ssl_txt_value}"
 
             if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
                 wildcard_success = True
-                ssh.exec_command(f"sudo certbot install --apache -d {domain} -d '*.{domain}' --non-interactive --redirect", timeout=120)
-
+        
         if not wildcard_success:
-            cmd = f"sudo certbot --apache -d {domain} --non-interactive --agree-tos --email admin@{domain} --redirect"
+            # For single domain, stop Apache temporarily and use standalone mode
+            ssh.exec_command("sudo systemctl stop apache2", timeout=30)
+            
+            cmd = f"sudo certbot certonly --standalone -d {domain} --non-interactive --agree-tos --email admin@{domain} 2>&1"
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
             exit_code = stdout.channel.recv_exit_status()
             output = stdout.read().decode()
             error = stderr.read().decode()
 
-        ssh.close()
-
+        # If certificate obtained successfully, configure Apache manually
         if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
+            # Create SSL vhost configuration
+            if wildcard_success:
+                ssl_vhost = f"""<VirtualHost *:443>
+    ServerName {domain}
+    ServerAlias *.{domain}
+    DocumentRoot /var/www/{domain}
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/{domain}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/{domain}/privkey.pem
+
+    <Directory /var/www/{domain}>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${{APACHE_LOG_DIR}}/{domain}_ssl_error.log
+    CustomLog ${{APACHE_LOG_DIR}}/{domain}_ssl_access.log combined
+</VirtualHost>"""
+            else:
+                ssl_vhost = f"""<VirtualHost *:443>
+    ServerName {domain}
+    DocumentRoot /var/www/{domain}
+
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/{domain}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/{domain}/privkey.pem
+
+    <Directory /var/www/{domain}>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${{APACHE_LOG_DIR}}/{domain}_ssl_error.log
+    CustomLog ${{APACHE_LOG_DIR}}/{domain}_ssl_access.log combined
+</VirtualHost>"""
+
+            # Upload SSL configuration
+            sftp = ssh.open_sftp()
+            with sftp.file(f'/tmp/{domain}-ssl.conf', 'w') as f:
+                f.write(ssl_vhost)
+            sftp.close()
+
+            # Move config and enable site
+            ssh.exec_command(f"sudo mv /tmp/{domain}-ssl.conf /etc/apache2/sites-available/{domain}-ssl.conf", timeout=30)
+            ssh.exec_command(f"sudo a2ensite {domain}-ssl.conf", timeout=30)
+            ssh.exec_command("sudo a2enmod ssl", timeout=30)
+            
+            # Add redirect to HTTPS in the main vhost
+            stdin, stdout, stderr = ssh.exec_command(f"sudo sed -i '/<\\/VirtualHost>/i\\    RewriteEngine On\\n    RewriteCond %{{HTTPS}} off\\n    RewriteRule ^(.*)$ https://%{{HTTP_HOST}}$1 [R=301,L]' /etc/apache2/sites-available/{domain}.conf", timeout=30)
+            ssh.exec_command("sudo a2enmod rewrite", timeout=30)
+            
+            # Restart Apache
+            ssh.exec_command("sudo systemctl restart apache2", timeout=30)
+
+            ssh.close()
+
             deployment.ssl_enabled = True
             deployment.ssl_step = 3
             deployment.admin_url = f"https://{domain}/admin"
             db.session.commit()
 
             message = f'SSL certificate installed successfully! Admin URL: https://{domain}/admin'
-            if deployment.is_wildcard and not wildcard_success:
-                message += ' (Note: Installed single-domain SSL. Wildcard requires Cloudflare DNS integration.)'
+            if wildcard_success:
+                message += ' (Wildcard SSL installed for *.{domain})'
 
             log_action('SSL Installed', f"SSL certificate installed for {domain}", server.id)
             return jsonify({'success': True, 'message': message})
         else:
+            # Restart Apache even if failed
+            ssh.exec_command("sudo systemctl start apache2", timeout=30)
+            ssh.close()
+            
             deployment.ssl_step = 0
             deployment.ssl_txt_value = None
             db.session.commit()
-            return jsonify({'success': False, 'message': f'SSL installation failed: {error if "error" in dir() else output}'})
+            
+            error_msg = error if 'error' in dir() else output
+            return jsonify({'success': False, 'message': f'SSL installation failed: {error_msg}'})
 
     except Exception as e:
+        try:
+            # Try to restart Apache if connection is still alive
+            ssh.exec_command("sudo systemctl start apache2", timeout=30)
+            ssh.close()
+        except:
+            pass
         log_action('SSL Installation Failed', f"Failed to install SSL for {deployment.domain}: {str(e)}", server.id)
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
