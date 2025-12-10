@@ -1,7 +1,7 @@
 modules = ["php-8.2", "web", "python-3.11", "nodejs-20"]
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libev", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip", "rsync"]
+packages = ["cargo", "libev", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip", "rsync", "openssh"]
 
 [agent]
 expertMode = true
