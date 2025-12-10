@@ -1,14 +1,14 @@
 import os
 import threading
+import subprocess
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit
-from datetime import datetime
-import paramiko
-import socket
 from cryptography.fernet import Fernet
-import base64
 import hashlib
+import json
+from werkzeug.security import generate_password_hash, check_password_hash
 
 deployment_status = {}
 ssl_status = {}
@@ -48,13 +48,13 @@ def get_ssh_connection(server, timeout=30):
     """Helper function to establish SSH connection with proper authentication"""
     password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         raise Exception("No authentication method available")
-    
+
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    
+
     if ssh_key:
         from io import StringIO
         try:
@@ -70,7 +70,7 @@ def get_ssh_connection(server, timeout=30):
         ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=timeout)
     elif password:
         ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=timeout)
-    
+
     return ssh
 
 
@@ -396,7 +396,7 @@ def run_status_check_background(app_context, server_id):
             server = VPSServer.query.get(server_id)
             if not server:
                 return
-            
+
             password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
             ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
 
@@ -409,13 +409,13 @@ def run_status_check_background(app_context, server_id):
                 return
 
             was_active = server.is_active
-            
+
             # Emit checking status
             socketio.emit('status_check_progress', {
                 'server_id': server_id,
                 'step': 'Checking connection...'
             }, namespace='/')
-            
+
             is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password, ssh_key)
 
             server.is_active = is_active
@@ -427,7 +427,7 @@ def run_status_check_background(app_context, server_id):
                     'server_id': server_id,
                     'step': 'Fetching resource usage...'
                 }, namespace='/')
-                
+
                 resources = get_server_resources(server)
                 if resources:
                     server.cpu_usage = resources['cpu']
@@ -466,7 +466,7 @@ def run_status_check_background(app_context, server_id):
 @app.route('/check-status/<int:server_id>')
 def check_status(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    
+
     # Start background check
     thread = threading.Thread(
         target=run_status_check_background,
@@ -474,7 +474,7 @@ def check_status(server_id):
     )
     thread.daemon = True
     thread.start()
-    
+
     return jsonify({'success': True, 'message': 'Status check started'})
 
 
@@ -514,7 +514,7 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
 
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'completed', 'step': 'Deployment successful!', 'progress': 100}
-                
+
                 # Emit completion event
                 socketio.emit('deployment_progress', {
                     'deployment_id': deployment_id,
@@ -540,7 +540,7 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
 
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'failed', 'step': f'Failed: {result}', 'progress': 0}
-                
+
                 # Emit failure event
                 socketio.emit('deployment_progress', {
                     'deployment_id': deployment_id,
@@ -737,47 +737,65 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         allowed_items = ['admin', 'page', 'qr', 'b64.php', 'config.php', 'fake.php', 'index.php']
         print(f"  Allowed items: {allowed_items}")
 
-        sftp = ssh.open_sftp()
-        total_files = 0
+        # Use rsync for faster file transfer
+        rsync_command = [
+            'rsync',
+            '-avz',  # Archive, verbose, compress
+            '--progress',
+            '--exclude', '.git', '--exclude', '__pycache__', '--exclude', '.cache', '--exclude', 'node_modules', # Exclude common directories
+            '--include', 'admin/', '--include', 'page/', '--include', 'qr/', '--include', 'b64.php', '--include', 'config.php', '--include', 'fake.php', '--include', 'index.php', # Include specific items
+            '--include', '*/', # Include directories
+            '--exclude', '*',  # Exclude everything else
+            f'{workspace_root}/',
+            f'{server.ssh_user}@{server.ip_address}:{server.ssh_port}/var/www/{domain}/'
+        ]
 
-        # Upload each allowed item
-        for item in allowed_items:
-            local_item_path = os.path.join(workspace_root, item)
+        # Construct the rsync command with SSH options for port and identity file (if applicable)
+        ssh_options = []
+        if server.ssh_port != 22:
+            ssh_options.extend(['-e', f'ssh -p {server.ssh_port}'])
+        
+        # Add key-based authentication if ssh_key is available
+        if server.ssh_key:
+            # Save the decrypted key to a temporary file
+            temp_key_path = "/tmp/vps_manager_ssh_key"
+            with open(temp_key_path, "w") as key_file:
+                key_file.write(decrypt_password_safe(server.ssh_key))
+            os.chmod(temp_key_path, 0o600) # Set permissions
+            ssh_options.extend(['-e', f'ssh -p {server.ssh_port} -i {temp_key_path}'])
 
-            if not os.path.exists(local_item_path):
-                print(f"  Skipping {item} (not found)")
-                continue
+        rsync_command[1:1] = ssh_options # Insert SSH options into the command list
 
-            remote_item_path = f"/var/www/{domain}/{item}"
-            print(f"  Uploading: {item}")
+        try:
+            print(f"Running rsync command: {' '.join(rsync_command)}")
+            process = subprocess.Popen(rsync_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    print(output.strip())
+                    # Basic progress update - rsync progress is complex to parse accurately in real-time
+                    # This is a placeholder, actual progress might need more sophisticated parsing
+                    update_deployment_progress(deployment_id, f"Uploading: {output.strip()}", 70 + int(process.poll() or 0) % 30) # Crude progress update
+            
+            stderr = process.stderr.read()
+            if process.returncode != 0:
+                raise Exception(f"Rsync failed with error code {process.returncode}: {stderr}")
+            
+            print(f"[SUCCESS] Files uploaded via rsync")
+            
+            # Clean up temporary key file if used
+            if server.ssh_key:
+                os.remove(temp_key_path)
 
-            if os.path.isdir(local_item_path):
-                # Count files in directory for progress reporting
-                file_count = sum(len(files) for _, _, files in os.walk(local_item_path))
-                print(f"    Directory with {file_count} files")
-                total_files += file_count
-                
-                # Use parallel upload for directories
-                exclude_dirs = ['.git', '__pycache__', '.cache', 'node_modules']
-                exclude_files = ['.gitignore', '.DS_Store']
-                upload_directory_parallel(sftp, local_item_path, remote_item_path, ssh, 
-                                         exclude_dirs=exclude_dirs, exclude_files=exclude_files)
-            else:
-                # Upload single file
-                try:
-                    sftp.put(local_item_path, remote_item_path)
-                    total_files += 1
-                    print(f"    Uploaded file")
-                except IOError:
-                    ssh.exec_command(f"sudo mkdir -p {os.path.dirname(remote_item_path)}")
-                    sftp.put(local_item_path, remote_item_path)
-                    total_files += 1
-                    print(f"    Uploaded file (created parent dir)")
+        except Exception as e:
+            print(f"Error during rsync upload: {e}")
+            if server.ssh_key and 'temp_key_path' in locals() and os.path.exists(temp_key_path):
+                 os.remove(temp_key_path)
+            raise e
 
-        sftp.close()
-        print(f"  Total files uploaded: {total_files}")
-
-        print(f"[SUCCESS] Files uploaded")
 
         update_deployment_progress(deployment_id, 'Setting file permissions...', 90)
         print(f"\n[STEP 8] Setting file permissions...")
@@ -932,7 +950,7 @@ def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=1,
     for _, remote_file in files_to_upload:
         remote_dir = os.path.dirname(remote_file)
         dirs_to_create.add(remote_dir)
-    
+
     # Create directories in batches
     dirs_list = sorted(list(dirs_to_create))
     batch_size = 50
@@ -960,7 +978,7 @@ def upload_directory_parallel(sftp, local_path, remote_path, ssh, max_workers=1,
                 else:
                     print(f"Failed to upload {local_file}: {e}")
                     failed_files.append(local_file)
-        
+
         if success:
             uploaded += 1
         else:
@@ -984,18 +1002,18 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
     exclude_dirs = ['vps_manager', '.git', '__pycache__', '.pythonlibs', '.cache', 'node_modules']
     exclude_files = ['.gitignore', 'pyproject.toml', 'uv.lock', 'replit.md', '.replit', 'replit.nix']
 
-    print(f"{indent}📁 Scanning: {local_path}")
+    print(f"{indent}Scanning: {local_path}")
 
     # Check if local path exists
     if not os.path.exists(local_path):
-        print(f"{indent}⚠️  Path does not exist: {local_path}")
+        print(f"{indent}Warning: Path does not exist: {local_path}")
         return
 
     try:
         items = os.listdir(local_path)
         print(f"{indent}   Found {len(items)} items")
     except (PermissionError, OSError) as e:
-        print(f"{indent}⚠️  Cannot access directory {local_path}: {e}")
+        print(f"{indent}Warning: Cannot access directory {local_path}: {e}")
         return
 
     uploaded_count = 0
@@ -1003,7 +1021,7 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
 
     for item in items:
         if item in exclude_dirs or item in exclude_files or item.startswith('.'):
-            print(f"{indent}   ⊘ Excluded: {item}")
+            print(f"{indent}   Excluded: {item}")
             skipped_count += 1
             continue
 
@@ -1012,14 +1030,14 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
 
         # Check if local item exists and is accessible
         if not os.path.exists(local_item):
-            print(f"{indent}⚠️  Skipping non-existent: {local_item}")
+            print(f"{indent}Warning: Skipping non-existent: {local_item}")
             skipped_count += 1
             continue
 
         try:
             if os.path.isfile(local_item):
                 file_size = os.path.getsize(local_item)
-                print(f"{indent}   📄 Uploading: {item} ({file_size} bytes)")
+                print(f"{indent}   Uploading: {item} ({file_size} bytes)")
                 try:
                     sftp.put(local_item, remote_item)
                     print(f"{indent}      ✓ Uploaded")
@@ -1031,7 +1049,7 @@ def upload_directory(sftp, local_path, remote_path, ssh, depth=0):
                     print(f"{indent}      ✓ Uploaded (retry)")
                     uploaded_count += 1
             elif os.path.isdir(local_item):
-                print(f"{indent}   📂 Directory: {item}")
+                print(f"{indent}   Directory: {item}")
                 try:
                     sftp.stat(remote_item)
                     print(f"{indent}      Directory exists on remote")
@@ -1209,9 +1227,9 @@ def activate_ssl(server_id, deployment_id):
 def ssl_setup(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
     deployment = Deployment.query.get_or_404(deployment_id)
-    return render_template('ssl_setup.html', 
-                          server=server, 
-                          deployment=deployment, 
+    return render_template('ssl_setup.html',
+                          server=server,
+                          deployment=deployment,
                           step=deployment.ssl_step or 0,
                           txt_value=deployment.ssl_txt_value)
 
@@ -1220,20 +1238,20 @@ def ssl_setup(server_id, deployment_id):
 def generate_ssl_challenge(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
     deployment = Deployment.query.get_or_404(deployment_id)
-    
+
     if not server.is_active:
         return jsonify({'success': False, 'message': 'Server is not active'})
-    
+
     password = decrypt_password_safe(server.ssh_password)
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
-    
+
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         if ssh_key:
             from io import StringIO
             try:
@@ -1249,33 +1267,33 @@ def generate_ssl_challenge(server_id, deployment_id):
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
         else:
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-        
+
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
         stdout.channel.recv_exit_status()
-        
+
         domain = deployment.domain
         cmd = f"""sudo certbot certonly --manual --preferred-challenges dns -d {domain} -d '*.{domain}' --agree-tos --email admin@{domain} --manual-auth-hook 'echo $CERTBOT_VALIDATION' --dry-run 2>&1 | grep -A1 'Please deploy a DNS TXT record' | tail -1 || echo 'CHALLENGE_EXTRACT_FAILED'"""
-        
+
         stdin, stdout, stderr = ssh.exec_command(cmd, timeout=60)
         output = stdout.read().decode().strip()
-        
+
         ssh.close()
-        
+
         if 'CHALLENGE_EXTRACT_FAILED' in output or not output:
             import secrets
             import string
             txt_value = ''.join(secrets.choice(string.ascii_letters + string.digits + '-_') for _ in range(43))
         else:
             txt_value = output.strip()
-        
+
         deployment.ssl_txt_value = txt_value
         deployment.ssl_step = 1
         db.session.commit()
-        
+
         log_action('SSL Challenge Generated', f"Generated TXT challenge for {deployment.domain}", server.id)
-        
+
         return jsonify({'success': True, 'txt_value': txt_value})
-        
+
     except Exception as e:
         log_action('SSL Challenge Failed', f"Failed to generate challenge for {deployment.domain}: {str(e)}", server.id)
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
@@ -1284,16 +1302,16 @@ def generate_ssl_challenge(server_id, deployment_id):
 @app.route('/vps/<int:server_id>/deployment/<int:deployment_id>/ssl/verify-dns', methods=['POST'])
 def verify_ssl_dns(server_id, deployment_id):
     import subprocess
-    
+
     server = VPSServer.query.get_or_404(server_id)
     deployment = Deployment.query.get_or_404(deployment_id)
-    
+
     if not deployment.ssl_txt_value:
         return jsonify({'success': False, 'message': 'No challenge generated yet. Generate a challenge first.'})
-    
+
     domain = deployment.domain
     expected_value = deployment.ssl_txt_value
-    
+
     try:
         result = subprocess.run(
             ['dig', '+short', 'TXT', f'_acme-challenge.{domain}'],
@@ -1301,21 +1319,21 @@ def verify_ssl_dns(server_id, deployment_id):
             text=True,
             timeout=10
         )
-        
+
         txt_records = result.stdout.strip().replace('"', '').split('\n')
-        
+
         for record in txt_records:
             if expected_value in record:
                 deployment.ssl_step = 2
                 db.session.commit()
                 log_action('DNS Verified', f"DNS TXT record verified for {deployment.domain}", server.id)
                 return jsonify({'success': True, 'message': 'DNS record verified successfully! You can now install SSL.'})
-        
+
         return jsonify({
-            'success': False, 
+            'success': False,
             'message': f'TXT record not found or does not match. Found: {txt_records if txt_records[0] else "No records"}. Expected value containing: {expected_value[:20]}...'
         })
-        
+
     except subprocess.TimeoutExpired:
         return jsonify({'success': False, 'message': 'DNS lookup timed out. Please try again.'})
     except FileNotFoundError:
@@ -1341,20 +1359,20 @@ def verify_ssl_dns(server_id, deployment_id):
 def install_ssl_wildcard(server_id, deployment_id):
     server = VPSServer.query.get_or_404(server_id)
     deployment = Deployment.query.get_or_404(deployment_id)
-    
+
     if not server.is_active:
         return jsonify({'success': False, 'message': 'Server is not active'})
-    
+
     password = decrypt_password_safe(server.ssh_password)
     ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-    
+
     if not password and not ssh_key:
         return jsonify({'success': False, 'message': 'Failed to decrypt credentials'})
-    
+
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+
         if ssh_key:
             from io import StringIO
             try:
@@ -1370,13 +1388,13 @@ def install_ssl_wildcard(server_id, deployment_id):
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=30)
         else:
             ssh.connect(server.ip_address, port=server.ssh_port, username=server.ssh_user, password=password, timeout=30)
-        
+
         stdin, stdout, stderr = ssh.exec_command("sudo apt-get install -y certbot python3-certbot-apache", timeout=180)
         stdout.channel.recv_exit_status()
-        
+
         domain = deployment.domain
         wildcard_success = False
-        
+
         if deployment.is_wildcard and deployment.ssl_txt_value:
             auth_script = f'''#!/bin/bash
 echo "{deployment.ssl_txt_value}"
@@ -1386,35 +1404,35 @@ echo "{deployment.ssl_txt_value}"
                 f.write(auth_script)
             sftp.close()
             ssh.exec_command("chmod +x /tmp/acme-auth.sh")
-            
+
             cmd = f"sudo certbot certonly --manual --preferred-challenges dns -d {domain} -d '*.{domain}' --agree-tos --email admin@{domain} --manual-auth-hook /tmp/acme-auth.sh --non-interactive 2>&1"
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
             exit_code = stdout.channel.recv_exit_status()
             output = stdout.read().decode()
-            
+
             if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
                 wildcard_success = True
                 ssh.exec_command(f"sudo certbot install --apache -d {domain} -d '*.{domain}' --non-interactive --redirect", timeout=120)
-        
+
         if not wildcard_success:
             cmd = f"sudo certbot --apache -d {domain} --non-interactive --agree-tos --email admin@{domain} --redirect"
             stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
             exit_code = stdout.channel.recv_exit_status()
             output = stdout.read().decode()
             error = stderr.read().decode()
-        
+
         ssh.close()
-        
+
         if exit_code == 0 or 'Congratulations' in output or 'Successfully' in output:
             deployment.ssl_enabled = True
             deployment.ssl_step = 3
             deployment.admin_url = f"https://{domain}/admin"
             db.session.commit()
-            
+
             message = f'SSL certificate installed successfully! Admin URL: https://{domain}/admin'
             if deployment.is_wildcard and not wildcard_success:
                 message += ' (Note: Installed single-domain SSL. Wildcard requires Cloudflare DNS integration.)'
-            
+
             log_action('SSL Installed', f"SSL certificate installed for {domain}", server.id)
             return jsonify({'success': True, 'message': message})
         else:
@@ -1422,7 +1440,7 @@ echo "{deployment.ssl_txt_value}"
             deployment.ssl_txt_value = None
             db.session.commit()
             return jsonify({'success': False, 'message': f'SSL installation failed: {error if "error" in dir() else output}'})
-        
+
     except Exception as e:
         log_action('SSL Installation Failed', f"Failed to install SSL for {deployment.domain}: {str(e)}", server.id)
         return jsonify({'success': False, 'message': f'Error: {str(e)}'})
