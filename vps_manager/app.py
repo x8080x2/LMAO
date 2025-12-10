@@ -2,6 +2,7 @@ import os
 import threading
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO, emit
 from datetime import datetime
 import paramiko
 import socket
@@ -19,6 +20,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
 if not ENCRYPTION_KEY:
@@ -436,6 +438,14 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
 
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'completed', 'step': 'Deployment successful!', 'progress': 100}
+                
+                # Emit completion event
+                socketio.emit('deployment_progress', {
+                    'deployment_id': deployment_id,
+                    'status': 'completed',
+                    'step': 'Deployment successful!',
+                    'progress': 100
+                }, namespace='/')
             else:
                 deployment.status = 'failed'
                 deployment.error_message = result
@@ -454,6 +464,14 @@ def run_deployment_background(app_context, deployment_id, server_data, password,
 
                 with deployment_lock:
                     deployment_status[deployment_id] = {'status': 'failed', 'step': f'Failed: {result}', 'progress': 0}
+                
+                # Emit failure event
+                socketio.emit('deployment_progress', {
+                    'deployment_id': deployment_id,
+                    'status': 'failed',
+                    'step': f'Failed: {result}',
+                    'progress': 0
+                }, namespace='/')
 
             db.session.commit()
 
@@ -548,6 +566,13 @@ def get_deployment_status(deployment_id):
 def update_deployment_progress(deployment_id, step, progress):
     with deployment_lock:
         deployment_status[deployment_id] = {'status': 'running', 'step': step, 'progress': progress}
+    # Emit real-time update via WebSocket
+    socketio.emit('deployment_progress', {
+        'deployment_id': deployment_id,
+        'status': 'running',
+        'step': step,
+        'progress': progress
+    }, namespace='/')
 
 
 def deploy_project_with_progress(server, password, domain, is_wildcard, deployment_id):
@@ -1539,4 +1564,4 @@ with app.app_context():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)

@@ -3,5 +3,7 @@ Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
 paramiko==3.4.0
 cryptography==41.0.7
+psycopg2-binary==2.9.9
 gunicorn==21.2.0
-requests==2.31.0
+Flask-SocketIO==5.3.5
+python-socketio==5.10.0

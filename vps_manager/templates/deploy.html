@@ -94,18 +94,31 @@
 {% block scripts %}
 <script>
 let deploymentId = null;
-let progressInterval = null;
+let socket = null;
 
 // Toggle SSL step visibility based on checkbox
 document.getElementById('auto_ssl')?.addEventListener('change', function(e) {
     document.getElementById('sslStep').style.display = e.target.checked ? 'list-item' : 'none';
 });
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
     const autoSsl = document.getElementById('auto_ssl');
     if (autoSsl && autoSsl.checked) {
         document.getElementById('sslStep').style.display = 'list-item';
     }
+    
+    // Initialize WebSocket connection
+    socket = io({
+        transports: ['websocket', 'polling']
+    });
+    
+    // Listen for deployment progress updates
+    socket.on('deployment_progress', function(data) {
+        if (data.deployment_id === deploymentId) {
+            updateProgress(data);
+        }
+    });
 });
 
 document.getElementById('deployForm').addEventListener('submit', function(e) {
@@ -132,7 +145,6 @@ document.getElementById('deployForm').addEventListener('submit', function(e) {
             form.style.display = 'none';
             document.getElementById('progressSection').style.display = 'block';
             deploymentId = data.deployment_id;
-            startProgressPolling();
         } else {
             throw new Error(data.message || 'Failed to start deployment');
         }
@@ -144,40 +156,24 @@ document.getElementById('deployForm').addEventListener('submit', function(e) {
     });
 });
 
-function startProgressPolling() {
-    progressInterval = setInterval(checkDeploymentProgress, 2000);
-    checkDeploymentProgress(); // Check immediately
-}
-
-function checkDeploymentProgress() {
-    if (!deploymentId) return;
+function updateProgress(data) {
+    const progressBar = document.getElementById('progressBar');
+    const progressStep = document.getElementById('progressStep');
     
-    fetch('/api/deployment-status/' + deploymentId)
-    .then(response => response.json())
-    .then(data => {
-        const progressBar = document.getElementById('progressBar');
-        const progressStep = document.getElementById('progressStep');
-        
-        progressBar.style.width = data.progress + '%';
-        progressBar.textContent = data.progress + '%';
-        progressStep.textContent = data.step;
-        
-        if (data.status === 'completed') {
-            clearInterval(progressInterval);
-            progressBar.classList.remove('progress-bar-animated');
-            progressBar.classList.add('bg-success');
-            setTimeout(() => {
-                window.location.href = '/vps/{{ server.id }}';
-            }, 2000);
-        } else if (data.status === 'failed') {
-            clearInterval(progressInterval);
-            progressBar.classList.remove('progress-bar-animated');
-            progressBar.classList.add('bg-danger');
-        }
-    })
-    .catch(error => {
-        console.error('Error checking progress:', error);
-    });
+    progressBar.style.width = data.progress + '%';
+    progressBar.textContent = data.progress + '%';
+    progressStep.textContent = data.step;
+    
+    if (data.status === 'completed') {
+        progressBar.classList.remove('progress-bar-animated');
+        progressBar.classList.add('bg-success');
+        setTimeout(() => {
+            window.location.href = '/vps/{{ server.id }}';
+        }, 2000);
+    } else if (data.status === 'failed') {
+        progressBar.classList.remove('progress-bar-animated');
+        progressBar.classList.add('bg-danger');
+    }
 }
 </script>
 {% endblock %}
