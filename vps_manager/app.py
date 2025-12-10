@@ -9,6 +9,7 @@ from cryptography.fernet import Fernet
 import hashlib
 import json
 from werkzeug.security import generate_password_hash, check_password_hash
+import paramiko
 
 deployment_status = {}
 ssl_status = {}
