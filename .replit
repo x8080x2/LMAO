@@ -1,7 +1,7 @@
 modules = ["php-8.2", "web", "python-3.11", "nodejs-20"]
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip"]
+packages = ["cargo", "libev", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "unzip"]
 
 [agent]
 expertMode = true
@@ -32,7 +32,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload app:app"
+args = "cd vps_manager && gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --worker-class gevent app:app"
 waitForPort = 5000
 
 [[ports]]
@@ -41,5 +41,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "--reuse-port", "--worker-class", "gevent", "app:app"]
 build = ["sh", "-c", "pip install -r vps_manager/requirements.txt 2>/dev/null || echo 'No requirements file found'"]
