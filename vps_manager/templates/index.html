@@ -140,29 +140,93 @@
 
 {% block scripts %}
 <script>
+let websocket = null;
+
+function connectWebSocket() {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        return;
+    }
+    websocket = new WebSocket("ws://localhost:5000/ws"); // Replace with your WebSocket server address
+
+    websocket.onopen = function(event) {
+        console.log("WebSocket connection opened.");
+    };
+
+    websocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        console.log("Message from server: ", data);
+
+        if (data.type === "status_update") {
+            const serverId = data.server_id;
+            const card = document.querySelector(`[data-server-id="${serverId}"]`);
+            if (card) {
+                const statusBadge = card.querySelector('.badge');
+                const statusButton = card.querySelector('button[onclick^="checkStatus"]');
+                const enterButton = card.querySelector('a[href^="/vps/"]');
+                const offlineButton = card.querySelector('button[disabled]');
+
+                if (data.is_active) {
+                    statusBadge.className = 'badge bg-success';
+                    statusBadge.textContent = 'Active';
+                    if (enterButton) enterButton.style.display = 'inline-flex';
+                    if (offlineButton) offlineButton.style.display = 'none';
+                } else {
+                    statusBadge.className = 'badge bg-danger';
+                    statusBadge.textContent = 'Inactive';
+                    if (enterButton) enterButton.style.display = 'none';
+                    if (offlineButton) offlineButton.style.display = 'inline-flex';
+                }
+
+                // Update resource display if available
+                if (data.cpu !== undefined && data.ram !== undefined && data.disk !== undefined) {
+                    updateResourceDisplay(serverId, data);
+                }
+
+                // Re-enable check button if it was disabled
+                if (statusButton && statusButton.disabled) {
+                    const originalHtml = statusButton.getAttribute('data-original-html');
+                    statusButton.innerHTML = originalHtml;
+                    statusButton.disabled = false;
+                }
+            }
+        }
+    };
+
+    websocket.onclose = function(event) {
+        console.log("WebSocket connection closed. Code:", event.code, "Reason:", event.reason);
+        // Attempt to reconnect after a delay
+        setTimeout(connectWebSocket, 5000);
+    };
+
+    websocket.onerror = function(event) {
+        console.error("WebSocket error observed:", event);
+    };
+}
+
+// Call connectWebSocket when the page loads
+window.onload = connectWebSocket;
+
 function checkStatus(serverId) {
     const btn = document.getElementById('check-btn-' + serverId);
     const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking...';
+    btn.setAttribute('data-original-html', originalHtml); // Store original HTML
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting check...';
     btn.disabled = true;
-    
+
     fetch('/check-status/' + serverId)
         .then(response => response.json())
         .then(data => {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-            
-            if (data.active) {
-                location.reload();
-            } else {
-                alert('Server is offline: ' + data.message);
-                location.reload();
+            if (!data.success) {
+                alert('Error: ' + data.message);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
             }
+            // WebSocket will handle the rest
         })
         .catch(error => {
+            alert('Error checking status: ' + error);
             btn.innerHTML = originalHtml;
             btn.disabled = false;
-            alert('Error checking status');
         });
 }
 
@@ -185,11 +249,11 @@ function updateResources() {
 function updateResourceDisplay(serverId, data) {
     const card = document.querySelector(`[data-server-id="${serverId}"]`);
     if (!card) return;
-    
+
     const cpuElement = card.querySelector('.cpu-usage');
     const ramElement = card.querySelector('.ram-usage');
     const diskElement = card.querySelector('.disk-usage');
-    
+
     if (cpuElement) {
         cpuElement.textContent = data.cpu + '%';
         cpuElement.className = 'small ' + (data.cpu > 80 ? 'text-danger' : 'text-success');
@@ -212,21 +276,21 @@ function filterServers() {
     const groupFilter = document.getElementById('groupFilter').value.toLowerCase();
     const tagFilter = document.getElementById('tagFilter').value.toLowerCase();
     const statusFilter = document.getElementById('statusFilter').value;
-    
+
     const serverCards = document.querySelectorAll('.server-card');
-    
+
     serverCards.forEach(card => {
         const cardContainer = card.closest('.col-md-6');
         const group = card.dataset.group ? card.dataset.group.toLowerCase() : '';
         const tags = card.dataset.tags ? card.dataset.tags.toLowerCase() : '';
         const status = card.dataset.status;
-        
+
         let show = true;
-        
+
         if (groupFilter && group !== groupFilter) show = false;
         if (tagFilter && !tags.includes(tagFilter)) show = false;
         if (statusFilter && status !== statusFilter) show = false;
-        
+
         cardContainer.style.display = show ? '' : 'none';
     });
 }
@@ -237,7 +301,7 @@ function checkAllServers() {
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking All...';
     btn.disabled = true;
-    
+
     fetch('/bulk-check-status', {
         method: 'POST'
     })

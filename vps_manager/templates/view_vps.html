@@ -12,7 +12,7 @@
         <p class="text-muted mb-0">{{ server.ip_address }} | {{ server.ssh_user }}@{{ server.ssh_port }}</p>
     </div>
     <div>
-        <button class="btn btn-outline-light me-2" onclick="checkStatus()">
+        <button class="btn btn-outline-light me-2" id="refreshBtn" onclick="checkStatus()">
             <i class="bi bi-arrow-repeat me-1"></i>Refresh Status
         </button>
         <button class="btn btn-outline-danger me-2" data-bs-toggle="modal" data-bs-target="#formatModal">
@@ -79,7 +79,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-lg-8 mb-4">
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -157,6 +157,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
 <script>
 // Auto-refresh for deploying deployments
 let refreshInterval = null;
@@ -186,15 +187,55 @@ document.getElementById('formatConfirmInput')?.addEventListener('input', functio
     }
 });
 
+let socket = null;
+
+// Initialize WebSocket connection
+document.addEventListener('DOMContentLoaded', function() {
+    socket = io({
+        transports: ['websocket', 'polling']
+    });
+
+    // Listen for status check progress
+    socket.on('status_check_progress', function(data) {
+        if (data.server_id === {{ server.id }}) {
+            const btn = document.getElementById('refreshBtn');
+            if (btn) {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + data.step;
+            }
+        }
+    });
+
+    // Listen for status check completion
+    socket.on('status_check_complete', function(data) {
+        if (data.server_id === {{ server.id }}) {
+            const btn = document.getElementById('refreshBtn');
+            if (btn) {
+                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Refresh Status';
+                btn.disabled = false;
+            }
+
+            // Reload page to show updated status
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        }
+    });
+});
+
 function checkStatus() {
-    const btn = event.target;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking...';
+    const btn = document.getElementById('refreshBtn');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Starting check...';
     btn.disabled = true;
-    
+
     fetch('/check-status/{{ server.id }}')
         .then(response => response.json())
         .then(data => {
-            location.reload();
+            if (!data.success) {
+                alert('Error: ' + data.message);
+                btn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Refresh Status';
+                btn.disabled = false;
+            }
+            // WebSocket will handle the rest
         })
         .catch(error => {
             alert('Error checking status: ' + error);
@@ -207,7 +248,7 @@ function formatVPS() {
     const btn = document.getElementById('confirmFormatBtn');
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Formatting...';
     btn.disabled = true;
-    
+
     fetch('/vps/{{ server.id }}/format', {
         method: 'POST'
     })
@@ -234,7 +275,7 @@ function activateSSL(serverId, deploymentId) {
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Installing SSL...';
     btn.disabled = true;
-    
+
     fetch('/vps/' + serverId + '/deployment/' + deploymentId + '/ssl', {
         method: 'POST'
     })

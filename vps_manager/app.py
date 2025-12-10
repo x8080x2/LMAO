@@ -360,46 +360,92 @@ def add_vps():
     return render_template('add_vps.html', groups=groups)
 
 
+def run_status_check_background(app_context, server_id):
+    with app_context:
+        try:
+            server = VPSServer.query.get(server_id)
+            if not server:
+                return
+            
+            password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
+            ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
+
+            if not password and not ssh_key:
+                socketio.emit('status_check_complete', {
+                    'server_id': server_id,
+                    'active': False,
+                    'message': 'Failed to decrypt credentials'
+                }, namespace='/')
+                return
+
+            was_active = server.is_active
+            
+            # Emit checking status
+            socketio.emit('status_check_progress', {
+                'server_id': server_id,
+                'step': 'Checking connection...'
+            }, namespace='/')
+            
+            is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password, ssh_key)
+
+            server.is_active = is_active
+            server.last_checked = datetime.utcnow()
+
+            # Get resource usage if server is active
+            if is_active:
+                socketio.emit('status_check_progress', {
+                    'server_id': server_id,
+                    'step': 'Fetching resource usage...'
+                }, namespace='/')
+                
+                resources = get_server_resources(server)
+                if resources:
+                    server.cpu_usage = resources['cpu']
+                    server.ram_usage = resources['ram']
+                    server.disk_usage = resources['disk']
+
+            db.session.commit()
+
+            log_action('Status Check', f"Checked {server.name}: {'Active' if is_active else 'Inactive'} - {message}", server.id)
+
+            # Send notification if server went offline
+            if was_active and not is_active:
+                settings = NotificationSettings.query.first()
+                if settings and settings.notify_offline:
+                    send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
+
+            # Emit completion
+            socketio.emit('status_check_complete', {
+                'server_id': server_id,
+                'active': is_active,
+                'message': message,
+                'cpu': server.cpu_usage,
+                'ram': server.ram_usage,
+                'disk': server.disk_usage,
+                'last_checked': server.last_checked.strftime('%Y-%m-%d %H:%M:%S')
+            }, namespace='/')
+
+        except Exception as e:
+            socketio.emit('status_check_complete', {
+                'server_id': server_id,
+                'active': False,
+                'message': f'Error: {str(e)}'
+            }, namespace='/')
+
+
 @app.route('/check-status/<int:server_id>')
 def check_status(server_id):
     server = VPSServer.query.get_or_404(server_id)
-    password = decrypt_password_safe(server.ssh_password) if server.ssh_password else None
-    ssh_key = decrypt_password_safe(server.ssh_key) if server.ssh_key else None
-
-    if not password and not ssh_key:
-        return jsonify({'active': False, 'message': 'Failed to decrypt credentials. Server may need to be re-added.'})
-
-    was_active = server.is_active
-    is_active, message = check_server_status(server.ip_address, server.ssh_port, server.ssh_user, password, ssh_key)
-
-    server.is_active = is_active
-    server.last_checked = datetime.utcnow()
-
-    # Get resource usage if server is active
-    if is_active:
-        resources = get_server_resources(server)
-        if resources:
-            server.cpu_usage = resources['cpu']
-            server.ram_usage = resources['ram']
-            server.disk_usage = resources['disk']
-
-    db.session.commit()
-
-    log_action('Status Check', f"Checked {server.name}: {'Active' if is_active else 'Inactive'} - {message}", server.id)
-
-    # Send notification if server went offline
-    if was_active and not is_active:
-        settings = NotificationSettings.query.first()
-        if settings and settings.notify_offline:
-            send_notification(f"🔴 VPS '{server.name}' ({server.ip_address}) went OFFLINE\n{message}", 'error')
-
-    return jsonify({
-        'active': is_active,
-        'message': message,
-        'cpu': server.cpu_usage,
-        'ram': server.ram_usage,
-        'disk': server.disk_usage
-    })
+    
+    # Start background check
+    thread = threading.Thread(
+        target=run_status_check_background,
+        args=(app.app_context(), server_id)
+    )
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'success': True, 'message': 'Status check started'})
 
 
 @app.route('/vps/<int:server_id>')
