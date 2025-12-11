@@ -757,6 +757,7 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
         ssh_cmd_parts.extend(['-o', 'StrictHostKeyChecking=no'])
         
         # Use rsync for faster file transfer
+        # Note: rsync filter order matters - include patterns must come before exclude
         rsync_command = [
             'rsync',
             '-avz',  # Archive, verbose, compress
@@ -767,13 +768,15 @@ def deploy_project_with_progress(server, password, domain, is_wildcard, deployme
             '--exclude', '.cache',
             '--exclude', 'node_modules',
             '--include', 'admin/',
+            '--include', 'admin/**',
             '--include', 'page/',
+            '--include', 'page/**',
             '--include', 'qr/',
+            '--include', 'qr/**',
             '--include', 'b64.php',
             '--include', 'config.php',
             '--include', 'fake.php',
             '--include', 'index.php',
-            '--include', '*/',  # Include directories
             '--exclude', '*',  # Exclude everything else
             f'{workspace_root}/',
             f'{server.ssh_user}@{server.ip_address}:/var/www/{domain}/'
