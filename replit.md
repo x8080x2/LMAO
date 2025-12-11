@@ -79,3 +79,8 @@ The VPS Manager runs on port 5000 and is configured via the workflow system.
   - Uses Certbot DNS-01 challenge for wildcard certs
   - Falls back to single-domain SSL if wildcard setup fails
   - Fixed Apache startup from `reload` to `restart` + `enable`
+
+- December 11, 2024: Deployment Fix
+  - Fixed rsync include patterns for admin/, page/, qr/ directories
+  - Added recursive patterns (admin/**, page/**, qr/**) to include all nested files
+  - Previously admin panel was blank after deployment because only directories were copied, not their contents
