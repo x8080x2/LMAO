@@ -32,7 +32,11 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
+args = """
+cd vps_manager && python -c \"from app import app, db, socketio; 
+with app.app_context(): 
+    db.create_all()
+socketio.run(app, host='0.0.0.0', port=5000, debug=True)\""""
 waitForPort = 5000
 
 [[ports]]
